@@ -1920,6 +1920,22 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }
         return;
       }
+      if (item.command === "summon") {
+        const replacement = "/summon ";
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+        );
+        if (applied) setComposerHighlightedItemId(null);
+        return;
+      }
       if (item.command === "side" || item.command === "btw") {
         if (props.sideChatDisabledReason) return;
         const applied = applyPromptReplacement(

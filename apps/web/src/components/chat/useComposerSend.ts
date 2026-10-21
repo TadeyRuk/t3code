@@ -55,7 +55,9 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   type ComposerSubmissionIntent,
+  buildSummonDelegationPrompt,
   collapseExpandedComposerCursor,
+  parseSummonComposerCommand,
 } from "../../composer-logic";
 import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
 import { recordPromptSent } from "../GitHubStarPrompt";
@@ -245,6 +247,10 @@ interface ComposerSendInput {
   readonly acknowledgeActiveThreadWoke: () => void;
   /** Resolves true once the side chat started and got the prompt. */
   readonly onSideChat?: ((prompt: string) => Promise<boolean>) | undefined;
+  /** Called once a `/summon` send is dispatched, so the view can open the child it creates. */
+  readonly onSummonDispatched?: ((parentThreadId: ThreadId) => void) | undefined;
+  /** Called when that send failed, so nothing waits for a child that will not appear. */
+  readonly onSummonFailed?: ((parentThreadId: ThreadId) => void) | undefined;
   /** Refuses `/side` with this reason and keeps the draft. */
   readonly sideChatDisabledReason: string | null;
   readonly handleNewThreadInActiveProject: () => void;
@@ -334,6 +340,8 @@ export function useComposerSend(input: ComposerSendInput) {
     anchorNewTurn,
     acknowledgeActiveThreadWoke,
     onSideChat,
+    onSummonDispatched,
+    onSummonFailed,
     sideChatDisabledReason,
     handleNewThreadInActiveProject,
     persistThreadSettingsForNextTurn,
@@ -607,10 +615,23 @@ export function useComposerSend(input: ComposerSendInput) {
       useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.replyTo ?? null;
     // The reply leads the message, so its card sits above the text it is about. Text that
     // already points at that response, from a pasted card, keeps its one reference.
-    const promptForSend =
+    const typedPromptForSend =
       replyTo && !collectInlineContextIds(draftPrompt).includes(replyTo.contextId)
         ? `${formatInlineContextReference(responseContextReference(replyTo))} ${draftPrompt}`
         : draftPrompt;
+    const summonTask = parseSummonComposerCommand(typedPromptForSend.trim());
+    if (summonTask === "") {
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Add a task for the child agent",
+          description: "Use /summon followed by what you want the child agent to do.",
+        }),
+      );
+      return;
+    }
+    const promptForSend =
+      summonTask === null ? typedPromptForSend : buildSummonDelegationPrompt(summonTask);
     const strandedThread = threadContextsOutsideEnvironment({
       text: promptForSend,
       records: composerThreadContexts,
@@ -1289,6 +1310,9 @@ export function useComposerSend(input: ComposerSendInput) {
           )
         : null;
       if (backgroundThreadRef) beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
+      // Arm only once this send is actually dispatched. Earlier returns must not leave a
+      // watcher that opens an unrelated child.
+      if (summonTask !== null) onSummonDispatched?.(threadIdForSend);
       const startPromise = startThreadTurn({
         environmentId,
         input: {
@@ -1340,6 +1364,7 @@ export function useComposerSend(input: ComposerSendInput) {
       const startResult = await startPromise;
       if (startResult._tag === "Failure") {
         failure = startResult;
+        if (summonTask !== null) onSummonFailed?.(threadIdForSend);
       } else {
         turnStartSucceeded = true;
         if (checkoutPullRequestUrl) {
