@@ -303,7 +303,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
-import { ThreadTodoPanel } from "./chat/ThreadTodoPanel";
+import { NO_TODO_STEPS, ThreadTodoPanel } from "./chat/ThreadTodoPanel";
 import { findRunningProviderRetry, latestActivityMs } from "./chat/threadTodoPanel.logic";
 import { ThreadUsageCard } from "./chat/ThreadUsageCard";
 import { NoActiveThreadState } from "./NoActiveThreadState";
@@ -3952,29 +3952,27 @@ export default function ChatView(props: ChatViewProps) {
                   }}
                 />
 
-                {activePlan ? (
-                  <ThreadTodoPanel
-                    steps={activePlan.steps}
-                    statusInput={{
-                      runStatus: activeRuntime?.status ?? null,
-                      connectionReconnecting: activeReconnectingEnvironmentId !== null,
-                      retry: findRunningProviderRetry(serverVisibleTurnItems),
-                      waitingOn:
-                        activePendingApproval !== null
-                          ? "approval"
-                          : pendingUserInputs.length > 0
-                            ? "question"
-                            : null,
-                      lastError: activeRuntime?.lastError ?? null,
-                      lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
-                      usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
-                      lastActivityAtMs: latestActivityMs(
-                        activeRuntime?.updatedAt,
-                        serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
-                      ),
-                    }}
-                  />
-                ) : null}
+                <ThreadTodoPanel
+                  steps={activePlan?.steps ?? NO_TODO_STEPS}
+                  statusInput={{
+                    runStatus: activeRuntime?.status ?? null,
+                    connectionReconnecting: activeReconnectingEnvironmentId !== null,
+                    retry: findRunningProviderRetry(serverVisibleTurnItems),
+                    waitingOn:
+                      activePendingApproval !== null
+                        ? "approval"
+                        : pendingUserInputs.length > 0
+                          ? "question"
+                          : null,
+                    lastError: activeRuntime?.lastError ?? null,
+                    lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
+                    usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
+                    lastActivityAtMs: latestActivityMs(
+                      activeRuntime?.updatedAt,
+                      serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
+                    ),
+                  }}
+                />
 
                 <ThreadUsageCard
                   threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
