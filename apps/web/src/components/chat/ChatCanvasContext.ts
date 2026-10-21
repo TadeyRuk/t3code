@@ -22,6 +22,8 @@ export const ChatCanvasContext = createContext<{
   preferredDetailsCard: ReturnType<typeof resolveThreadDetailsCardLayout>;
   /** Where the inline card sits now; null when it shows as a popover. */
   detailsCardPlacement: ReturnType<typeof resolveThreadDetailsCardLayout>;
+  /** Bottom edge of the inline details card's content; null when it is not shown inline. */
+  detailsCardBottom: number | null;
 } | null>(null);
 
 export const useChatCanvas = () => useContext(ChatCanvasContext);

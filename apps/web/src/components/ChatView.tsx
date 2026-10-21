@@ -301,6 +301,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { ThreadUsageCard } from "./chat/ThreadUsageCard";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   resolveEffectiveEnvMode,
@@ -2509,6 +2510,15 @@ export default function ChatView(props: ChatViewProps) {
     pendingApprovals.length > 0 ||
     pendingUserInputs.length > 0;
   const compactDisabled = compactThreadUnavailable;
+  const compactDisabledReason = compactDisabled
+    ? !canOperateThread
+      ? "This connection cannot change threads."
+      : !activeProject
+        ? "Choose a project before compacting"
+        : !manualCompactionProviderAvailable
+          ? "Compaction is unavailable for this provider"
+          : "Compacting is unavailable right now"
+    : null;
   // The context window is the current conversation's, so a handoff destination never inherits it.
   const resumeCompactionTokens =
     activeContextWindow &&
@@ -3939,6 +3949,24 @@ export default function ChatView(props: ChatViewProps) {
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
                   }}
+                />
+
+                <ThreadUsageCard
+                  threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
+                  contextWindow={activeContextWindow}
+                  providerInstanceId={activeProviderInstanceId}
+                  providers={providerStatuses}
+                  sources={serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES}
+                  compactAction={
+                    manualCompactionProviderAvailable
+                      ? {
+                          label: "Compact context",
+                          onActivate: onComposerCompactContextStable,
+                          disabled: compactDisabled,
+                          disabledReason: compactDisabledReason,
+                        }
+                      : undefined
+                  }
                 />
 
                 <PullRequestThreadDialogHost

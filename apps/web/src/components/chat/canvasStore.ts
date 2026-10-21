@@ -153,5 +153,6 @@ export function resolveChatCanvasModel({
     preferredDetailsCard,
     detailsCardPlacement,
     detailsCardMode,
+    detailsCardBottom: detailsCard?.bottom ?? null,
   };
 }
