@@ -24,6 +24,10 @@ export const ChatCanvasContext = createContext<{
   detailsCardPlacement: ReturnType<typeof resolveThreadDetailsCardLayout>;
   /** Bottom edge of the inline details card, or null when it is closed or a popover. */
   detailsCardBottom: number | null;
+  /** Left edge of the visible chat column within the canvas, or 0 before it is measured. */
+  chatContentLeft: number;
+  /** Left edge of the visible chat column within the canvas, or 0 before it is measured. */
+  chatContentLeft: number;
 } | null>(null);
 
 export const useChatCanvas = () => useContext(ChatCanvasContext);

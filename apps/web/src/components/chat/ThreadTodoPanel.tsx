@@ -24,10 +24,12 @@ import {
 } from "./threadTodoPanel.logic";
 import { THREAD_DETAILS_CARD_GAP } from "./threadDetailsCardLayout";
 
-const PANEL_WIDTH = 248;
-// Clears the timeline scrubber, which rests at the canvas edge and opens over this strip.
-const PANEL_LEFT = 64;
-const PANEL_CLEARANCE = 20;
+const PANEL_MAX_WIDTH = 248;
+// Below this the step text wraps too tightly to read, so the panel hides instead.
+const PANEL_MIN_WIDTH = 208;
+// Clears the timeline scrubber's resting ticks, which sit at 12px to 36px.
+const PANEL_LEFT = 40;
+const PANEL_CLEARANCE = 16;
 
 type StepStatus = ActivePlanState["steps"][number]["status"];
 
@@ -254,7 +256,13 @@ export function ThreadTodoPanel({
 
   if (!canvas) return null;
   const gap = THREAD_DETAILS_CARD_GAP;
-  if (canvas.layout.chat.left < PANEL_LEFT + PANEL_WIDTH + PANEL_CLEARANCE) return null;
+  // The lane bound is a fallback only: it can be far narrower than the column you see.
+  const contentLeft = canvas.chatContentLeft > 0 ? canvas.chatContentLeft : canvas.layout.chat.left;
+  // Shrinks into the room beside the chat before giving up: at 120% UI zoom the column starts only
+  // about 330px in, so a fixed width would hide the panel on a perfectly normal window.
+  const available = contentLeft - PANEL_LEFT - PANEL_CLEARANCE;
+  if (available < PANEL_MIN_WIDTH) return null;
+  const width = Math.min(PANEL_MAX_WIDTH, available);
 
   const done = steps.filter((step) => step.status === "completed").length;
   const noList = steps.length === 0;
@@ -274,7 +282,7 @@ export function ThreadTodoPanel({
       style={{
         left: PANEL_LEFT,
         top,
-        width: PANEL_WIDTH,
+        width,
         maxHeight: Math.max(0, canvas.container.height - top - gap),
       }}
       data-thread-todo-panel
