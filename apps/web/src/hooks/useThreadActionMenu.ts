@@ -177,6 +177,15 @@ export function useThreadActionMenu(input: {
         }
       };
       switch (action) {
+        case "clear-session": {
+          const result = await settlePromise(() =>
+            handleNewThread(scopeProjectRef(threadRef.environmentId, thread.projectId)),
+          );
+          if (result._tag === "Failure") {
+            failureToast("Could not start a fresh session", squashAtomCommandFailure(result));
+          }
+          return;
+        }
         case "project-settings": {
           const project = projects.find(
             (candidate) =>

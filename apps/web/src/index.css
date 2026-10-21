@@ -639,6 +639,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   initial-value: 0;
 }
 
+/* Registered so the usage dial's conic mask can ease between values instead of jumping. */
+@property --usage-dial-progress {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
 @layer base {
   ::highlight(t3-assistant-citation) {
     background-color: color-mix(

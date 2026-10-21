@@ -99,6 +99,7 @@ export type PendingApproval = ThreadPendingApproval;
 export type PendingUserInput = ThreadPendingUserInput;
 
 export interface ActivePlanState {
+  readonly id: PlanId;
   readonly createdAt: string;
   readonly runId: RunId | null;
   readonly explanation?: string | null;
@@ -273,6 +274,7 @@ export function deriveActivePlanState(
     );
   if (plan === null || plan.steps.length === 0) return null;
   return {
+    id: plan.id,
     createdAt: planItemTime(projection, plan.id),
     runId: plan.runId,
     explanation: plan.explanation ?? null,

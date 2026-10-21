@@ -15,6 +15,7 @@ export function ChatCanvas({
 }) {
   const elementRef = useRef<HTMLDivElement | null>(null);
   const widthProbeRef = useRef<HTMLDivElement | null>(null);
+  // State rather than a ref so the measuring effect re-runs once the timeline actually mounts.
   const [timelineElement, registerTimeline] = useState<HTMLElement | null>(null);
   const [preview, setPreview] = useState<ChatCanvasPreview | null>(null);
   const [detailsCard, setDetailsCard] = useState<PreviewMiniPlayerObstacles["detailsCard"]>(null);
@@ -38,6 +39,7 @@ export function ChatCanvas({
     findBarLeft: 0,
     findBarRight: 0,
     findBarBottom: 0,
+    contentLeft: 0,
   });
   const reportPreview = (next: ChatCanvasPreview) => {
     setPreview((current) =>
@@ -58,6 +60,8 @@ export function ChatCanvas({
     const element = elementRef.current;
     const probe = widthProbeRef.current;
     if (!element || !probe) return;
+    const composerHost =
+      composerOverlayElement?.querySelector<HTMLElement>('[data-slot="composer-host"]') ?? null;
     const findBar =
       detailsCardTopInset > 0 ? element.querySelector<HTMLElement>("[data-thread-find-bar]") : null;
     const measure = () => {
@@ -74,10 +78,19 @@ export function ChatCanvas({
         maxChatWidth: Number.parseFloat(styles.width),
         minChatWidth: Number.parseFloat(styles.minWidth),
         composerHeight: composerOverlayElement?.getBoundingClientRect().height ?? 0,
+        // Where the visible chat column starts. The lane's own left bound is wider than the
+        // column under the chat-width setting, so side panels measure the column itself.
+        contentLeft: composerHost
+          ? composerHost.getBoundingClientRect().left - canvasBounds.left
+          : 0,
+        // Half the scrollbar width: index.css takes it off the lane padding on each side, so the
+        // column keeps its width when a classic scrollbar claims space.
         timelineGutter: timelineElement
           ? (timelineElement.offsetWidth - timelineElement.clientWidth) / 2
           : 0,
       };
+      // Keep the old object when nothing moved: every observed element feeds this callback, and a
+      // fresh object would re-render the whole canvas context on each resize notification.
       setMeasurements((current) =>
         Object.keys(next).every(
           (key) => current[key as keyof typeof current] === next[key as keyof typeof next],
@@ -90,6 +103,7 @@ export function ChatCanvas({
     const observed: Element[] = [element, probe];
     if (findBar) observed.push(findBar);
     if (composerOverlayElement) observed.push(composerOverlayElement);
+    if (composerHost) observed.push(composerHost);
     if (timelineElement) observed.push(timelineElement);
     return observeResize(observed, measure);
   }, [composerOverlayElement, timelineElement, detailsCardTopInset]);
@@ -118,6 +132,8 @@ export function ChatCanvas({
     registerTimeline,
     reportDetailsCard,
     detailsCardTopInset: findBar?.bottom ?? 0,
+    detailsCardBottom: detailsCard?.bottom ?? null,
+    chatContentLeft: measurements.contentLeft,
   };
   const { layout } = context;
   return (
@@ -136,6 +152,8 @@ export function ChatCanvas({
           } as CSSProperties
         }
       >
+        {/* Never shown: it lets getComputedStyle resolve the lane's padding and width bounds, which
+            come from CSS variables and breakpoints that are not available to JS directly. */}
         <div
           ref={widthProbeRef}
           aria-hidden

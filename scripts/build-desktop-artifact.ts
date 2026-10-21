@@ -2831,7 +2831,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
-    artifactName: "T3-Code-${version}-${arch}.${ext}",
+    artifactName: "Rukkie_V1-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
       ...DESKTOP_FILE_EXCLUSIONS,
@@ -2957,7 +2957,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
     buildConfig.linux = {
-      target: target === "AppImage" ? [target, "deb"] : [target],
+      // Personal Fedora builds ship the AppImage only; fpm for .deb needs libcrypt.so.1.
+      target: [target],
       executableName: "t3code",
       icon: "icons",
       category: "Development",

@@ -29,6 +29,7 @@ import { useScratchProject } from "../hooks/useScratchProject";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { useProjectScriptEditing } from "./chat/useProjectScriptEditing";
 import { RightPanelSurfaceContent } from "./chat/RightPanelSurfaceContent";
+import { ProjectExplorerPanel } from "./files/ProjectExplorerPanel";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import { usePendingThreadRequests } from "./chat/usePendingThreadRequests";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
@@ -51,6 +52,7 @@ import {
   TYPE_TO_FOCUS_FLOATING_LAYER_SELECTOR,
 } from "./chat/composerFocusRedirect";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import {
   AuthOrchestrationOperateScope,
@@ -181,8 +183,10 @@ import { useDiffPanelStore } from "../diffPanelStore";
 import { useActiveThreadRef } from "../hooks/useActiveThreadRef";
 import {
   type ComposerSubmissionIntent,
+  buildSummonDelegationPrompt,
   collapseExpandedComposerCursor,
   composerRequiresModifier,
+  parseSummonComposerCommand,
   parseStandaloneComposerSlashCommand,
 } from "../composer-logic";
 import {
@@ -439,6 +443,9 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { NO_TODO_STEPS, ThreadTodoPanel } from "./chat/ThreadTodoPanel";
+import { findRunningProviderRetry, latestActivityMs } from "./chat/threadTodoPanel.logic";
+import { ThreadUsageCard } from "./chat/ThreadUsageCard";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   resolveEffectiveEnvMode,
@@ -1353,6 +1360,11 @@ export default function ChatView(props: ChatViewProps) {
   const citeAssistantTextStable = useStableCallback(citeAssistantText);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
+  const [projectExplorerOpen, setProjectExplorerOpen] = useState(false);
+  const pendingSummonedChildRef = useRef<{
+    readonly parentThreadId: ThreadId;
+    readonly existingTaskIds: ReadonlySet<string>;
+  } | null>(null);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   // Set by "Work locally": the draft whose restored message should be resent
   // once the cancelled dispatch has settled and the draft is in local mode.
@@ -1976,9 +1988,8 @@ export default function ChatView(props: ChatViewProps) {
     };
   })() as ComposerBannerStackItem | null;
   const activeProjectDefaultModelSelection = activeProjectSettings.settings.defaultModelSelection;
-  const handleNewThreadInActiveProject = () => {
+  const handleNewThreadInActiveProject = () =>
     startNewThreadForProject(activeProjectRef, handleNewThread);
-  };
   const handleNewThreadInActiveProjectStable = useStableCallback(handleNewThreadInActiveProject);
   const projectGroupingSettings = selectProjectGroupingSettings(settings);
   const activeDraftLogicalProjectKey =
@@ -5295,6 +5306,26 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
   const onOpenRelatedThreadStable = useStableCallback(onOpenRelatedThread);
+  useEffect(() => {
+    const pending = pendingSummonedChildRef.current;
+    if (pending === null) return;
+    if (activeThread === undefined) return;
+    if (pending.parentThreadId !== activeThread.id) {
+      pendingSummonedChildRef.current = null;
+      return;
+    }
+    const summonedChild =
+      serverProjection?.subagents.find(
+        (task) =>
+          task.origin === "app_owned" &&
+          !pending.existingTaskIds.has(task.id) &&
+          task.childThreadId !== null,
+      ) ?? null;
+    if (summonedChild?.childThreadId) {
+      pendingSummonedChildRef.current = null;
+      onOpenRelatedThreadStable(summonedChild.childThreadId);
+    }
+  }, [activeThread?.id, onOpenRelatedThreadStable, serverProjection]);
   const childThreadInputs = useChildThreadInputs(activeThreadRef);
   const childInputBannerItem = (() => {
     const first = childThreadInputs[0];
@@ -6400,6 +6431,18 @@ export default function ChatView(props: ChatViewProps) {
         composerReviewComments.length +
         composerThreadContexts.length,
     });
+    const summonTask = parseSummonComposerCommand(trimmed);
+    if (summonTask === "") {
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Add a task for the child agent",
+          description: "Use /summon followed by what you want the child agent to do.",
+        }),
+      );
+      return;
+    }
+    if (summonTask === null) pendingSummonedChildRef.current = null;
     const feedbackCommand =
       ctxSelectedProvider === "codex" &&
       composerImages.length === 0 &&
@@ -6527,7 +6570,6 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
     const standaloneSlashCommand =
-      sendInteractionModeEnabled &&
       composerImages.length === 0 &&
       composerFiles.length === 0 &&
       sendableComposerTerminalContexts.length === 0 &&
@@ -6536,7 +6578,27 @@ export default function ChatView(props: ChatViewProps) {
       composerThreadContexts.length === 0
         ? parseStandaloneComposerSlashCommand(trimmed)
         : null;
-    if (standaloneSlashCommand && multipleModelSelections === null) {
+    if (standaloneSlashCommand === "clear") {
+      if (!handleNewThreadInActiveProject()) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Choose a project first",
+            description: "A fresh session needs a project or scratch workspace.",
+          }),
+        );
+        return;
+      }
+      promptRef.current = "";
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+      return;
+    }
+    if (
+      sendInteractionModeEnabled &&
+      standaloneSlashCommand !== null &&
+      multipleModelSelections === null
+    ) {
       handleInteractionModeChange(standaloneSlashCommand);
       promptRef.current = "";
       clearComposerDraftContent(composerDraftTarget);
@@ -6592,12 +6654,14 @@ export default function ChatView(props: ChatViewProps) {
     const composerPreviewAnnotationsSnapshot = [...composerPreviewAnnotations];
     const composerReviewCommentsSnapshot: ReviewCommentContext[] = [...composerReviewComments];
     const composerThreadContextsSnapshot = [...composerThreadContexts];
+    const promptForDispatch =
+      summonTask === null ? promptForSend : buildSummonDelegationPrompt(summonTask);
     const messageTextForSend = composerTerminalContexts
       .filter((context) => !composerTerminalContextsSnapshot.includes(context))
       .reduce(
         (text, context) =>
           removeInlineContextReference(text, terminalContextReference(context).contextId).prompt,
-        promptForSend,
+        promptForDispatch,
       )
       .trim();
     // Records bind attachments by the id each side knows: the local id for the optimistic
@@ -7206,6 +7270,14 @@ export default function ChatView(props: ChatViewProps) {
           ? scopeThreadRef(environmentId, threadIdForSend)
           : null;
       if (backgroundThreadRef) beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
+      // Arm only once this send is actually dispatched. Earlier returns must not
+      // leave a watcher that opens an unrelated child.
+      if (summonTask !== null) {
+        pendingSummonedChildRef.current = {
+          parentThreadId: threadIdForSend,
+          existingTaskIds: new Set(serverProjection?.subagents.map((task) => task.id) ?? []),
+        };
+      }
       const startPromise = startThreadTurn({
         environmentId,
         input: {
@@ -7277,6 +7349,9 @@ export default function ChatView(props: ChatViewProps) {
       const startResult = await startPromise;
       if (startResult._tag === "Failure") {
         failure = startResult;
+        if (pendingSummonedChildRef.current?.parentThreadId === threadIdForSend) {
+          pendingSummonedChildRef.current = null;
+        }
       } else {
         turnStartSucceeded = true;
         setKeepFullHistory(routeThreadKey, false);
@@ -8024,6 +8099,7 @@ export default function ChatView(props: ChatViewProps) {
     />
   ) : null;
   const panelToggleControlProps = {
+    showExplorerControl: !isMobileViewport,
     terminalAvailable: activeProject !== null,
     terminalOpen: terminalUiState.terminalOpen,
     terminalShortcutLabel: shortcutLabelForCommand(keybindings, "terminal.toggle"),
@@ -8034,8 +8110,11 @@ export default function ChatView(props: ChatViewProps) {
     rightPanelAvailable: activeProject !== null,
     rightPanelOpen,
     rightPanelShortcutLabel: shortcutLabelForCommand(keybindings, "rightPanel.toggle"),
+    explorerAvailable: activeProject !== null && !isMobileViewport,
+    explorerOpen: projectExplorerOpen,
     onToggleTerminal: toggleTerminalVisibilityStable,
     onToggleThreadPanel: toggleThreadPanelStable,
+    onToggleExplorer: () => setProjectExplorerOpen((open) => !open),
     onToggleRightPanel: toggleRightPanelStable,
   } satisfies PanelLayoutControlsProps;
   const panelToggleControls = (
@@ -8102,6 +8181,21 @@ export default function ChatView(props: ChatViewProps) {
         state={deviceState}
       />
       {rightPanelControlsAtRoot ? panelLayoutControls : null}
+      {projectExplorerOpen && activeProject && activeWorkspaceRoot && !isMobileViewport ? (
+        <ProjectExplorerPanel
+          environmentId={activeThread.environmentId}
+          cwd={activeWorkspaceRoot}
+          projectName={activeProject.title}
+          selectedPath={
+            activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface.relativePath : null
+          }
+          selectedPathRevealId={
+            activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface.revealRequestId : 0
+          }
+          onOpenFile={openFileSurfaceStable}
+          workspaceMutationId={workspaceMutationId}
+        />
+      ) : null}
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
@@ -8129,7 +8223,7 @@ export default function ChatView(props: ChatViewProps) {
           {isElectron && rightPanelControlsAtRoot ? (
             <span
               aria-hidden
-              className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
+              className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-44 [-webkit-app-region:no-drag]"
             />
           ) : null}
           {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
@@ -8762,6 +8856,48 @@ export default function ChatView(props: ChatViewProps) {
               onAddProjectScript={saveProjectScriptStable}
               onUpdateProjectScript={updateProjectScriptStable}
               onDeleteProjectScript={deleteProjectScriptStable}
+            />
+
+            <ThreadTodoPanel
+              threadId={activeThread.id}
+              planId={activePlan?.id ?? null}
+              steps={activePlan?.steps ?? NO_TODO_STEPS}
+              statusInput={{
+                runStatus: activeRuntime?.status ?? null,
+                connectionReconnecting: activeReconnectingEnvironmentId !== null,
+                retry: findRunningProviderRetry(serverVisibleTurnItems),
+                waitingOn:
+                  activePendingApproval !== null
+                    ? "approval"
+                    : pendingUserInputs.length > 0
+                      ? "question"
+                      : null,
+                lastError: activeRuntime?.lastError ?? null,
+                lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
+                usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
+                lastActivityAtMs: latestActivityMs(
+                  activeRuntime?.updatedAt,
+                  serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
+                ),
+              }}
+            />
+
+            <ThreadUsageCard
+              threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
+              contextWindow={activeContextWindow}
+              providerInstanceId={activeProviderInstanceId}
+              providers={providerStatuses}
+              sources={serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES}
+              compactAction={
+                manualCompactionProviderAvailable
+                  ? {
+                      label: "Compact context",
+                      onActivate: onComposerCompactContextStable,
+                      disabled: compactDisabled,
+                      disabledReason: compactDisabledReason,
+                    }
+                  : undefined
+              }
             />
 
             <PullRequestThreadDialogHost

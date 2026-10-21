@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  buildSummonDelegationPrompt,
   clampCollapsedComposerCursor,
   collapseExpandedComposerCursor,
   composerSubmissionIntentForKey,
@@ -22,6 +23,8 @@ import {
   formatAssistantCitationForComposer,
   isCollapsedCursorAdjacentToInlineToken,
   isPathSuggestionCurrent,
+  parseSummonComposerCommand,
+  parseStandaloneComposerSlashCommand,
   replaceTextRange,
 } from "./composer-logic";
 import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
@@ -45,6 +48,42 @@ const citation: AssistantCitation = {
   prefix: "前: ",
   suffix: " 後",
 };
+
+describe("parseStandaloneComposerSlashCommand", () => {
+  it("recognizes /clear as a standalone app command", () => {
+    expect(parseStandaloneComposerSlashCommand("/clear")).toBe("clear");
+    expect(parseStandaloneComposerSlashCommand(" /CLEAR ")).toBe("clear");
+    expect(parseStandaloneComposerSlashCommand("/clear this too")).toBeNull();
+  });
+});
+
+describe("parseSummonComposerCommand", () => {
+  it("extracts the requested child task while preserving multiline instructions", () => {
+    expect(parseSummonComposerCommand("/summon Inspect the session logic\nReport risks")).toBe(
+      "Inspect the session logic\nReport risks",
+    );
+  });
+
+  it("distinguishes an empty summon from an unrelated prompt", () => {
+    expect(parseSummonComposerCommand(" /SUMMON ")).toBe("");
+    expect(parseSummonComposerCommand("/summon this is not standalone")).toBe(
+      "this is not standalone",
+    );
+    expect(parseSummonComposerCommand("please /summon this")).toBeNull();
+  });
+});
+
+describe("buildSummonDelegationPrompt", () => {
+  it("requests one async child and keeps the user's task intact", () => {
+    const prompt = buildSummonDelegationPrompt("Review the login flow\nReport security gaps");
+    expect(prompt).toContain("delegate_task");
+    expect(prompt).toContain("exactly one app-owned child agent");
+    expect(prompt).toContain("Start it now asynchronously");
+    expect(prompt).toContain("T3 thread link");
+    expect(prompt).toContain("The app will open that conversation");
+    expect(prompt).toContain("Review the login flow\nReport security gaps");
+  });
+});
 const citationSource = serializeAssistantCitation(citation).replaceAll("+", "%20");
 
 describe("isPathSuggestionCurrent", () => {
