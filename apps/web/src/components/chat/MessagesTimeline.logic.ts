@@ -282,8 +282,10 @@ const TIMELINE_MINIMAP_ITEM_SPACING = 8;
 export const TIMELINE_MINIMAP_MIN_ITEMS = 2;
 export const TIMELINE_MINIMAP_TARGET_OFFSET = 24;
 // Relative to the timeline, not the viewport, so an open terminal shrinks the rail and
-// endpoint previews (centered on their strip) still fit above and below it.
-const TIMELINE_MINIMAP_MAX_HEIGHT_CSS = "max(4rem, calc(100% - 14.75rem))";
+// endpoint previews (centered on their strip) still fit above and below it. Container units
+// (the minimap is a size container) so nested rail layers and transforms resolve it alike.
+const TIMELINE_MINIMAP_MAX_HEIGHT_CSS = "max(4rem, calc(100cqh - 14.75rem))";
+export const TIMELINE_MINIMAP_RESTING_HEIGHT = "7rem";
 const TIMELINE_MINIMAP_PERSISTENT_GUTTER = 48;
 
 export interface WorkGroupScrollAnchor {
