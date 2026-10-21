@@ -20,6 +20,7 @@ const measurements = (width: number, height = 900): ChatCanvasMeasurements => ({
   minChatWidth: 640,
   composerHeight: 180,
   timelineGutter: 0,
+  contentLeft: 0,
   findBar: null,
 });
 const preview: ChatCanvasPreview = {

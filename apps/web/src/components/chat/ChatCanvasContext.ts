@@ -10,6 +10,7 @@ export interface DetailsCardMeasurement {
   readonly fullContentHeight: number;
 }
 
+// Null outside a ChatCanvas: side panels render nothing there rather than guess at a layout.
 export const ChatCanvasContext = createContext<{
   container: { width: number; height: number };
   lane: { padding: number; minChatWidth: number };
