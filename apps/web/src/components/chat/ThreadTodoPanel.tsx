@@ -154,6 +154,42 @@ function useQuietClock(lastActivityAtMs: number | null, enabled: boolean): numbe
   return nowMs;
 }
 
+// Past this many steps the segments would be slivers, so the bar fills continuously instead.
+const MAX_BAR_SEGMENTS = 24;
+
+function TaskBar({ steps }: { readonly steps: ActivePlanState["steps"] }) {
+  const done = steps.filter((step) => step.status === "completed").length;
+  const label = `${done} of ${steps.length} steps done`;
+  return (
+    <div className="px-4 pb-2.5" role="img" aria-label={label}>
+      {steps.length <= MAX_BAR_SEGMENTS ? (
+        <div className="flex gap-[3px]">
+          {steps.map((step, index) => (
+            <span
+              key={index}
+              className={cn(
+                "h-1 min-w-0 flex-1 rounded-full",
+                step.status === "completed"
+                  ? "bg-success"
+                  : step.status === "inProgress"
+                    ? "bg-foreground"
+                    : "bg-muted-foreground/22",
+              )}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="h-1 overflow-hidden rounded-full bg-muted-foreground/22">
+          <div
+            className="h-full rounded-full bg-success"
+            style={{ width: `${(done / steps.length) * 100}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepNode({
   status,
   color,
@@ -217,14 +253,18 @@ export function ThreadTodoPanel({
   }, [activeIndex]);
 
   if (!canvas) return null;
-  // With no list, only a live turn has anything to say, such as a dropped connection or a stall.
-  // A failure from an old turn would otherwise greet every visit to the thread.
-  if (steps.length === 0 && ENDED_STATUS_KINDS.has(status.kind)) return null;
   const gap = THREAD_DETAILS_CARD_GAP;
   if (canvas.layout.chat.left < PANEL_LEFT + PANEL_WIDTH + PANEL_CLEARANCE) return null;
 
   const done = steps.filter((step) => step.status === "completed").length;
-  const presentation = presentStatus(status, { done, total: steps.length }, nowMs);
+  const noList = steps.length === 0;
+  // With no list, only a live turn has a status worth a banner. A failure from an old turn would
+  // otherwise greet every visit to the thread.
+  const presentation =
+    noList && ENDED_STATUS_KINDS.has(status.kind)
+      ? null
+      : presentStatus(status, { done, total: steps.length }, nowMs);
+  const showEmptyNote = noList && presentation === null;
   const top = gap + canvas.detailsCardTopInset;
 
   return (
@@ -250,6 +290,7 @@ export function ThreadTodoPanel({
             </span>
           ) : null}
         </div>
+        {steps.length > 0 ? <TaskBar steps={steps} /> : null}
         {presentation ? (
           <div
             role="status"
@@ -277,6 +318,11 @@ export function ThreadTodoPanel({
               </span>
             </span>
           </div>
+        ) : null}
+        {showEmptyNote ? (
+          <p className="m-0 px-4 pt-1 pb-3.5 text-[11.5px] leading-[1.4] text-muted-foreground">
+            No to-do list yet. It appears here when an agent makes one.
+          </p>
         ) : null}
         <ol
           className={cn(
