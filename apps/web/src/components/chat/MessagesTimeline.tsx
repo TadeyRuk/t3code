@@ -1132,6 +1132,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
 
   const refreshMinimap = useStableCallback(() => {
     const state = listRef.current?.getState?.();
+    // The list can still hold the previous rows; its indices would mark the wrong strips in view.
     if (restoringThreadPosition || state?.data !== rows) return;
     if (!state || minimapItems.length === 0) {
       return;
@@ -1256,6 +1257,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       return;
     }
 
+    // The scrubber lives in the side gutter the centred content column leaves free, so its hit
+    // strip is sized from viewport minus content and collapses to nothing rather than cover messages.
     const measure = () => {
       const viewportWidth = timelineViewportElement.getBoundingClientRect().width;
       const contentWidth =
@@ -1673,6 +1676,8 @@ function TimelineMinimap({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const wheelTargetRef = (node: HTMLDivElement | null) => {
     if (!node) return;
+    // Native and non-passive: the forwarder calls preventDefault, which React's passive onWheel
+    // would ignore.
     node.addEventListener("wheel", onWheel, { passive: false });
     return () => node.removeEventListener("wheel", onWheel);
   };
@@ -1767,6 +1772,8 @@ function TimelineMinimap({
             });
           }}
           onMouseMove={(event) => {
+            // A drag that began elsewhere (a text selection) must not be captured when it crosses the
+            // rail, so the rail goes inert until the buttons are released.
             if (event.buttons !== 0 && !pressedOnStripRef.current) setPassThrough(true);
           }}
           style={

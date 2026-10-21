@@ -344,6 +344,8 @@ export function ThreadRelationshipsPanel(props: {
       label: "Active agents",
       rows: active,
       expanded: true,
+      // Subagents with no child thread have no row to list, so the count adds them or it would
+      // read lower than the work actually running.
       count:
         active.length +
         (projection?.subagents.filter(
@@ -353,6 +355,8 @@ export function ThreadRelationshipsPanel(props: {
     },
     { id: "previous", label: "Previous agents", rows: previous, expanded: false },
   ];
+  // Narrower than the "Active agents" count on purpose: a waiting agent is alive but not running,
+  // and the title should only claim work that is actually in progress.
   const runningCount =
     (projection?.subagents.filter(
       (agent) => agent.childThreadId === null && agent.status === "running",

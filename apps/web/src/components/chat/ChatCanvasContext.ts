@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { ChatCanvasPreview, resolveChatCanvasLayout } from "./chatCanvasLayout";
 import type { PreviewMiniPlayerObstacles } from "../preview/previewMiniPlayerLayout";
 
+// Null outside a ChatCanvas: side panels render nothing there rather than guess at a layout.
 export const ChatCanvasContext = createContext<{
   container: { width: number; height: number };
   lane: { padding: number; minChatWidth: number };
