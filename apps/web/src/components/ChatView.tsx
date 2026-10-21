@@ -55,6 +55,7 @@ import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts } from "./chat/useChatShortcuts";
 import { ChatBannerLane } from "./chat/ChatBannerLane";
+import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import {
   AuthOrchestrationOperateScope,
@@ -301,6 +302,12 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { ThreadTodoPanel } from "./chat/ThreadTodoPanel";
+import {
+  deriveActivePlanState,
+  findRunningProviderRetry,
+  latestActivityMs,
+} from "./chat/threadTodoPanel.logic";
 import { ThreadUsageCard } from "./chat/ThreadUsageCard";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
@@ -838,6 +845,7 @@ export default function ChatView(props: ChatViewProps) {
   const supportsProviderSwitchingViaHandoff = threadSupportsProviderHandoff(serverProjection);
   const activeLatestRun = isServerThread ? serverLatestRun : (activeThread?.latestRun ?? null);
   const activeActivityRun = isServerThread ? serverActivityRun : (activeThread?.latestRun ?? null);
+  const activePlan = deriveActivePlanState(serverProjection, activeActivityRun?.runId);
   const activeRuntime = isServerThread ? serverRuntime : (activeThread?.runtime ?? null);
   const hasHeldQueuedRuns =
     isServerThread &&
@@ -3950,6 +3958,32 @@ export default function ChatView(props: ChatViewProps) {
                     contextWindow: activeContextWindow,
                   }}
                 />
+
+                {activePlan ? (
+                  <ThreadTodoPanel
+                    steps={activePlan.steps}
+                    statusInput={{
+                      runStatus: activeRuntime?.status ?? null,
+                      connectionReconnecting:
+                        activeEnvironment?.connection.phase === "connecting" ||
+                        activeEnvironment?.connection.phase === "reconnecting",
+                      retry: findRunningProviderRetry(serverVisibleTurnItems),
+                      waitingOn:
+                        activePendingApproval !== null
+                          ? "approval"
+                          : pendingUserInputs.length > 0
+                            ? "question"
+                            : null,
+                      lastError: activeRuntime?.lastError ?? null,
+                      lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
+                      usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
+                      lastActivityAtMs: latestActivityMs(
+                        activeRuntime?.updatedAt,
+                        serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
+                      ),
+                    }}
+                  />
+                ) : null}
 
                 <ThreadUsageCard
                   threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
