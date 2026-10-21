@@ -2907,7 +2907,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const repoRoot = yield* RepoRoot;
     buildConfig.afterPack = path.join(repoRoot, "scripts/linux-after-pack.ts");
     buildConfig.linux = {
-      target: target === "AppImage" ? [target, "deb"] : [target],
+      // Personal Fedora builds ship the AppImage only; fpm for .deb needs libcrypt.so.1.
+      target: [target],
       executableName: "t3code",
       icon: "icons",
       category: "Development",
