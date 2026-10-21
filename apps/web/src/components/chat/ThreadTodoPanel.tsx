@@ -71,7 +71,7 @@ function presentStatus(
         head: "Running",
         sub:
           progress.total === 0
-            ? "No to-do list yet; it appears when the agent makes one"
+            ? "No to-do list yet; the agent hasn't planned one"
             : `Step ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`,
       };
     case "retrying":
@@ -320,9 +320,12 @@ export function ThreadTodoPanel({
           </div>
         ) : null}
         {showEmptyNote ? (
-          <p className="m-0 px-4 pt-1 pb-3.5 text-[11.5px] leading-[1.4] text-muted-foreground">
-            No to-do list yet. It appears here when an agent makes one.
-          </p>
+          <div className="px-4 pt-0.5 pb-3.5">
+            <p className="m-0 text-xs leading-[1.3] font-medium text-foreground">Nothing's up</p>
+            <p className="m-0 mt-0.5 text-[11px] leading-[1.4] text-muted-foreground">
+              When an agent plans a to-do list, it shows up here.
+            </p>
+          </div>
         ) : null}
         <ol
           className={cn(

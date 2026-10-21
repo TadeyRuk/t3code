@@ -8768,29 +8768,27 @@ export default function ChatView(props: ChatViewProps) {
               onDeleteProjectScript={deleteProjectScriptStable}
             />
 
-            {isServerThread ? (
-              <ThreadTodoPanel
-                steps={activePlan?.steps ?? NO_TODO_STEPS}
-                statusInput={{
-                  runStatus: activeRuntime?.status ?? null,
-                  connectionReconnecting: activeReconnectingEnvironmentId !== null,
-                  retry: findRunningProviderRetry(serverVisibleTurnItems),
-                  waitingOn:
-                    activePendingApproval !== null
-                      ? "approval"
-                      : pendingUserInputs.length > 0
-                        ? "question"
-                        : null,
-                  lastError: activeRuntime?.lastError ?? null,
-                  lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
-                  usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
-                  lastActivityAtMs: latestActivityMs(
-                    activeRuntime?.updatedAt,
-                    serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
-                  ),
-                }}
-              />
-            ) : null}
+            <ThreadTodoPanel
+              steps={activePlan?.steps ?? NO_TODO_STEPS}
+              statusInput={{
+                runStatus: activeRuntime?.status ?? null,
+                connectionReconnecting: activeReconnectingEnvironmentId !== null,
+                retry: findRunningProviderRetry(serverVisibleTurnItems),
+                waitingOn:
+                  activePendingApproval !== null
+                    ? "approval"
+                    : pendingUserInputs.length > 0
+                      ? "question"
+                      : null,
+                lastError: activeRuntime?.lastError ?? null,
+                lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
+                usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
+                lastActivityAtMs: latestActivityMs(
+                  activeRuntime?.updatedAt,
+                  serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
+                ),
+              }}
+            />
 
             <ThreadUsageCard
               threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
