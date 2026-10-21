@@ -55,7 +55,9 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   type ComposerSubmissionIntent,
+  buildSummonDelegationPrompt,
   collapseExpandedComposerCursor,
+  parseSummonComposerCommand,
 } from "../../composer-logic";
 import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
 import { recordPromptSent } from "../GitHubStarPrompt";
@@ -247,6 +249,11 @@ interface ComposerSendInput {
   readonly onSideChat?: ((prompt: string) => Promise<boolean>) | undefined;
   /** Refuses `/side` with this reason and keeps the draft. */
   readonly sideChatDisabledReason: string | null;
+  /** Opens the child a `/summon` turn delegates, once it appears; disarmed on any other send. */
+  readonly summonWatcher?: {
+    readonly arm: (parentThreadId: ThreadId) => void;
+    readonly disarm: (parentThreadId?: ThreadId) => void;
+  };
   readonly handleNewThreadInActiveProject: () => void;
   readonly persistThreadSettingsForNextTurn: (input: {
     threadId: ThreadId;
@@ -335,6 +342,7 @@ export function useComposerSend(input: ComposerSendInput) {
     acknowledgeActiveThreadWoke,
     onSideChat,
     sideChatDisabledReason,
+    summonWatcher,
     handleNewThreadInActiveProject,
     persistThreadSettingsForNextTurn,
     linkCheckoutPullRequest,
@@ -737,6 +745,18 @@ export function useComposerSend(input: ComposerSendInput) {
       composerRef.current?.resetCursorState();
       return;
     }
+    const summonTask = parseSummonComposerCommand(trimmed);
+    if (summonTask === "") {
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Add a task for the child agent",
+          description: "Use /summon followed by what you want the child agent to do.",
+        }),
+      );
+      return;
+    }
+    if (summonTask === null) summonWatcher?.disarm();
     // Read once: an arm made while this send is in flight belongs to the next message.
     const freshArm = freshSessionAvailable ? readFreshSessionArm(routeThreadKey) : undefined;
     if (!hasSendableContent) {
@@ -767,7 +787,7 @@ export function useComposerSend(input: ComposerSendInput) {
     }
     const threadIdForSend = activeThread.id;
     const sendSnapshot = snapshotComposerSend({
-      prompt: promptForSend,
+      prompt: summonTask === null ? promptForSend : buildSummonDelegationPrompt(summonTask),
       images: composerImages,
       files: composerFiles,
       terminalContexts: composerTerminalContexts,
@@ -1289,6 +1309,8 @@ export function useComposerSend(input: ComposerSendInput) {
           )
         : null;
       if (backgroundThreadRef) beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
+      // Armed only once this send is dispatched, so an earlier return never opens an unrelated child.
+      if (summonTask !== null) summonWatcher?.arm(threadIdForSend);
       const startPromise = startThreadTurn({
         environmentId,
         input: {
@@ -1340,6 +1362,7 @@ export function useComposerSend(input: ComposerSendInput) {
       const startResult = await startPromise;
       if (startResult._tag === "Failure") {
         failure = startResult;
+        summonWatcher?.disarm(threadIdForSend);
       } else {
         turnStartSucceeded = true;
         if (checkoutPullRequestUrl) {

@@ -1920,6 +1920,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }
         return;
       }
+      if (item.command === "summon") {
+        const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "/summon ", {
+          expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+        });
+        if (applied) setComposerHighlightedItemId(null);
+        return;
+      }
       if (item.command === "side" || item.command === "btw") {
         if (props.sideChatDisabledReason) return;
         const applied = applyPromptReplacement(

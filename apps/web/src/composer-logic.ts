@@ -18,7 +18,7 @@ import {
 import { resolveShortcutCommand, type ShortcutEventLike } from "./keybindings";
 
 export type ComposerTriggerKind = "path" | "pull-request" | "slash-command" | "skill";
-export type ComposerSlashCommand = "model" | "side" | "btw" | "clear";
+export type ComposerSlashCommand = "model" | "side" | "btw" | "clear" | "summon";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
 export interface ComposerTrigger {
@@ -334,3 +334,18 @@ export function extendReplacementRangeForTrailingSpace(
 }
 
 export { replaceTextRange } from "@t3tools/shared/composerTrigger";
+
+/** Returns the requested child task, or null when the prompt is not a /summon command. */
+export function parseSummonComposerCommand(text: string): string | null {
+  const match = /^\/summon(?:\s+([\s\S]*))?$/iu.exec(text.trim());
+  return match === null ? null : (match[1]?.trim() ?? "");
+}
+
+export function buildSummonDelegationPrompt(task: string): string {
+  return [
+    "Use delegate_task to create exactly one app-owned child agent for this task. Start it now asynchronously; do not do the task yourself or wait for it to finish. Return the child's T3 thread link as soon as it exists. The app will open that conversation so I can message the child directly.",
+    "",
+    "Child task:",
+    task,
+  ].join("\n");
+}

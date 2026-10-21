@@ -1,4 +1,5 @@
 import {
+  FolderTreeIcon,
   PanelBottomIcon,
   PanelRightIcon,
   SquareMenuIcon,
@@ -30,8 +31,12 @@ export interface PanelLayoutControlsProps {
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
   rightPanelUnavailableLabel?: string;
+  explorerAvailable?: boolean;
+  explorerOpen?: boolean;
   onToggleTerminal: () => void;
   onToggleThreadPanel: () => void;
+  /** Shows the project Explorer toggle; surfaces without an Explorer leave it out. */
+  onToggleExplorer?: () => void;
   onToggleRightPanel: () => void;
 }
 
@@ -50,8 +55,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   rightPanelOpen,
   rightPanelShortcutLabel,
   rightPanelUnavailableLabel = "Right panel is unavailable",
+  explorerAvailable = false,
+  explorerOpen = false,
   onToggleTerminal,
   onToggleThreadPanel,
+  onToggleExplorer,
   onToggleRightPanel,
 }: PanelLayoutControlsProps) {
   const threadPanelToggle = (
@@ -107,6 +115,27 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             {terminalAvailable
               ? `Toggle terminal drawer${terminalShortcutLabel ? ` (${terminalShortcutLabel})` : ""}`
               : "Terminal drawer is unavailable"}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
+      {onToggleExplorer ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0" />}>
+            <Toggle
+              className="shrink-0 [-webkit-app-region:no-drag]"
+              pressed={explorerOpen}
+              onPressedChange={onToggleExplorer}
+              aria-label="Toggle project Explorer"
+              data-project-explorer-toggle
+              variant="ghost"
+              size="sm"
+              disabled={!explorerAvailable}
+            >
+              <FolderTreeIcon className="size-4" />
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">
+            {explorerAvailable ? "Toggle project Explorer" : "Explorer is available in projects"}
           </TooltipPopup>
         </Tooltip>
       ) : null}

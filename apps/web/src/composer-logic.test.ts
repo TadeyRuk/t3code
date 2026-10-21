@@ -14,6 +14,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  buildSummonDelegationPrompt,
   clampCollapsedComposerCursor,
   collapseExpandedComposerCursor,
   composerSubmissionIntentForKey,
@@ -23,6 +24,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   formatAssistantCitationForComposer,
   isPathSuggestionCurrent,
+  parseSummonComposerCommand,
   replaceTextRange,
 } from "./composer-logic";
 import { slashCommandItemsForPromptPosition } from "./components/chat/composerSlashCommandSearch";
@@ -591,5 +593,31 @@ describe("side chat slash commands", () => {
     expect(slashCommandItemsForPromptPosition(items, false).map((item) => item.id)).toEqual([
       "slash:model",
     ]);
+  });
+});
+
+describe("parseSummonComposerCommand", () => {
+  it("extracts the requested child task while preserving multiline instructions", () => {
+    expect(parseSummonComposerCommand("/summon Inspect the session logic\nReport risks")).toBe(
+      "Inspect the session logic\nReport risks",
+    );
+  });
+
+  it("distinguishes an empty summon from an unrelated prompt", () => {
+    expect(parseSummonComposerCommand(" /SUMMON ")).toBe("");
+    expect(parseSummonComposerCommand("/summon this is not standalone")).toBe(
+      "this is not standalone",
+    );
+    expect(parseSummonComposerCommand("please /summon this")).toBeNull();
+  });
+});
+
+describe("buildSummonDelegationPrompt", () => {
+  it("requests one async child and keeps the user's task intact", () => {
+    const prompt = buildSummonDelegationPrompt("Review the login flow\nReport security gaps");
+    expect(prompt).toContain("delegate_task");
+    expect(prompt).toContain("exactly one app-owned child agent");
+    expect(prompt).toContain("Start it now asynchronously");
+    expect(prompt).toContain("Review the login flow\nReport security gaps");
   });
 });

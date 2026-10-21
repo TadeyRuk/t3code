@@ -44,6 +44,7 @@ import { useLogicalProjectEnvironments } from "../hooks/useLogicalProjectEnviron
 import { useStableCallback } from "../hooks/useStableCallback";
 import { useProjectScriptEditing } from "./chat/useProjectScriptEditing";
 import { RightPanelSurfaceContent } from "./chat/RightPanelSurfaceContent";
+import { ProjectExplorerPanel } from "./files/ProjectExplorerPanel";
 import { usePendingThreadRequests } from "./chat/usePendingThreadRequests";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -667,6 +668,11 @@ export default function ChatView(props: ChatViewProps) {
     return accepted;
   });
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
+  const [projectExplorerOpen, setProjectExplorerOpen] = useState(false);
+  const pendingSummonedChildRef = useRef<{
+    readonly parentThreadId: ThreadId;
+    readonly existingTaskIds: ReadonlySet<string>;
+  } | null>(null);
   const [optimisticBlobPreviews] = useState(createOptimisticBlobPreviews);
   const [heldOptimisticUserMessages, setHeldOptimisticUserMessages] = useState(() =>
     emptyOptimisticUserMessages(threadId),
@@ -2485,6 +2491,26 @@ export default function ChatView(props: ChatViewProps) {
     scrollToEnd,
     persistThreadSettingsForNextTurn,
   });
+  const summonParentThreadId = activeThread?.id;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- navigates to the child a /summon turn delegated once the projection shows it
+  useEffect(() => {
+    const pending = pendingSummonedChildRef.current;
+    if (pending === null || summonParentThreadId === undefined) return;
+    if (pending.parentThreadId !== summonParentThreadId) {
+      pendingSummonedChildRef.current = null;
+      return;
+    }
+    const summonedChild = serverProjection?.subagents.find(
+      (task) =>
+        task.origin === "app_owned" &&
+        !pending.existingTaskIds.has(task.id) &&
+        task.childThreadId !== null,
+    );
+    if (summonedChild?.childThreadId) {
+      pendingSummonedChildRef.current = null;
+      onOpenRelatedThreadStable(summonedChild.childThreadId);
+    }
+  }, [summonParentThreadId, onOpenRelatedThreadStable, serverProjection]);
   const activeThreadHasCompactableConversation = serverVisibleTurnItems.some(
     ({ item }) =>
       item.type === "user_message" &&
@@ -3002,6 +3028,22 @@ export default function ChatView(props: ChatViewProps) {
     acknowledgeActiveThreadWoke,
     onSideChat: sideChat.available ? sendSideChatStable : undefined,
     sideChatDisabledReason,
+    summonWatcher: {
+      arm: (parentThreadId) => {
+        pendingSummonedChildRef.current = {
+          parentThreadId,
+          existingTaskIds: new Set(serverProjection?.subagents.map((task) => task.id) ?? []),
+        };
+      },
+      disarm: (parentThreadId) => {
+        if (
+          parentThreadId === undefined ||
+          pendingSummonedChildRef.current?.parentThreadId === parentThreadId
+        ) {
+          pendingSummonedChildRef.current = null;
+        }
+      },
+    },
     handleNewThreadInActiveProject,
     persistThreadSettingsForNextTurn,
     linkCheckoutPullRequest,
@@ -3296,8 +3338,13 @@ export default function ChatView(props: ChatViewProps) {
     rightPanelAvailable: activeProject !== null,
     rightPanelOpen,
     rightPanelShortcutLabel: shortcutLabelForCommand(keybindings, "rightPanel.toggle"),
+    explorerAvailable: activeProject !== null,
+    explorerOpen: projectExplorerOpen,
     onToggleTerminal: toggleTerminalVisibilityStable,
     onToggleThreadPanel: toggleThreadPanelStable,
+    ...(isMobileViewport
+      ? {}
+      : { onToggleExplorer: () => setProjectExplorerOpen((open) => !open) }),
     onToggleRightPanel: toggleRightPanelStable,
   } satisfies PanelLayoutControlsProps;
   const panelToggleControls = (
@@ -3337,6 +3384,25 @@ export default function ChatView(props: ChatViewProps) {
         />
       )}
       {rightPanelControlsAtRoot && !embedded ? panelLayoutControls : null}
+      {projectExplorerOpen &&
+      activeProject &&
+      activeWorkspaceRoot &&
+      !isMobileViewport &&
+      !embedded ? (
+        <ProjectExplorerPanel
+          environmentId={activeThread.environmentId}
+          cwd={activeWorkspaceRoot}
+          projectName={activeProject.title}
+          selectedPath={
+            activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface.relativePath : null
+          }
+          selectedPathRevealId={
+            activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface.revealRequestId : 0
+          }
+          onOpenFile={openFileSurfaceStable}
+          workspaceMutationId={workspaceMutationId}
+        />
+      ) : null}
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
@@ -3366,7 +3432,7 @@ export default function ChatView(props: ChatViewProps) {
             {isElectron && rightPanelControlsAtRoot ? (
               <span
                 aria-hidden
-                className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
+                className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-44 [-webkit-app-region:no-drag]"
               />
             ) : null}
             {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}

@@ -242,6 +242,13 @@ export function useComposerMenuItems({
           label: "/model",
           description: "Switch response model for this thread",
         },
+        {
+          id: "slash:summon",
+          type: "slash-command",
+          command: "summon",
+          label: "/summon",
+          description: "Start a child agent and open its conversation",
+        },
         ...(sideChatAvailable
           ? ([
               {
