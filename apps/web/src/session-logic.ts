@@ -7,7 +7,9 @@ import {
   type OrchestrationV2PlanArtifact,
   type OrchestrationV2ProjectedTurnItem,
   type OrchestrationV2RunAttempt,
+  type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
+  type PlanId,
   type RunId,
   type ToolActivitySurface,
   type ToolActivityIcon,
@@ -92,6 +94,18 @@ export interface WorkLogEntry {
   readonly structuredPayload?: OrchestrationV2TurnItem;
   readonly sourceItemType?: OrchestrationV2TurnItem["type"];
   readonly projectedItem?: OrchestrationV2ProjectedTurnItem;
+}
+
+export interface ActivePlanState {
+  readonly id: PlanId;
+  readonly createdAt: string;
+  readonly runId: RunId | null;
+  readonly explanation?: string | null;
+  readonly steps: Array<{
+    readonly step: string;
+    readonly status: "pending" | "inProgress" | "completed";
+    readonly durationMs?: number;
+  }>;
 }
 
 export type PendingApproval = ThreadPendingApproval;
@@ -1124,3 +1138,78 @@ export function deriveCanInterruptRunningThread(
 }
 
 export type { TurnDiffSummary };
+
+export function deriveActivePlanState(
+  projection: OrchestrationV2ThreadProjection | null,
+  latestRunId: RunId | undefined,
+): ActivePlanState | null {
+  if (projection === null) return null;
+  const plans = projection.plans
+    .filter((plan) => plan.kind === "todo_list")
+    .filter((plan) => plan.status !== "superseded");
+  const runOrdinals = new Map<RunId | null, number>(
+    projection.runs.map((run) => [run.id, run.ordinal]),
+  );
+  const plan =
+    plans.findLast((candidate) => candidate.runId === latestRunId) ??
+    plans.reduce<(typeof plans)[number] | null>(
+      (latest, candidate) =>
+        latest === null ||
+        (runOrdinals.get(candidate.runId) ?? -1) >= (runOrdinals.get(latest.runId) ?? -1)
+          ? candidate
+          : latest,
+      null,
+    );
+  if (plan === null || plan.steps.length === 0) return null;
+  return {
+    id: plan.id,
+    createdAt: planItemTime(projection, plan.id),
+    runId: plan.runId,
+    explanation: plan.explanation ?? null,
+    steps: plan.steps.map(({ text, status, durationMs }) => ({
+      step: text,
+      status: status === "running" ? "inProgress" : status,
+      ...(durationMs === undefined ? {} : { durationMs }),
+    })),
+  };
+}
+
+// Claude's unfinished tasks belong to the provider session, not just the turn.
+export function selectComposerTasksPlan(
+  projection: OrchestrationV2ThreadProjection | null,
+  plan: ActivePlanState | null,
+  activeRunId: RunId | null,
+  activeRunSettled: boolean,
+): ActivePlanState | null {
+  if (projection === null || plan === null) return null;
+  if (activeRunId !== null && !activeRunSettled && plan.runId === activeRunId) return plan;
+  if (plan.steps.every((step) => step.status === "completed")) return null;
+  const planProviderThreadId = projection.runs.find(
+    (run) => run.id === plan.runId,
+  )?.providerThreadId;
+  if (planProviderThreadId === undefined || planProviderThreadId === null) return null;
+  const planDriver = projection.providerThreads.find(
+    (providerThread) => providerThread.id === planProviderThreadId,
+  )?.driver;
+  if (planDriver !== "claudeAgent") return null;
+  let latestStartedRun: OrchestrationV2ThreadProjection["runs"][number] | null = null;
+  for (const run of projection.runs) {
+    if (
+      run.startedAt !== null &&
+      run.providerThreadId !== null &&
+      (latestStartedRun === null || run.ordinal > latestStartedRun.ordinal)
+    ) {
+      latestStartedRun = run;
+    }
+  }
+  return latestStartedRun?.providerThreadId === planProviderThreadId ? plan : null;
+}
+
+function planItemTime(projection: OrchestrationV2ThreadProjection, planId: PlanId): string {
+  const item = projection.turnItems.findLast(
+    (candidate) =>
+      (candidate.type === "proposed_plan" || candidate.type === "todo_list") &&
+      candidate.planId === planId,
+  );
+  return DateTime.formatIso(item?.updatedAt ?? projection.updatedAt);
+}
