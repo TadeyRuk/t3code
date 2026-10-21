@@ -47,6 +47,7 @@ const citation: AssistantCitation = {
   prefix: "前: ",
   suffix: " 後",
 };
+
 const citationSource = serializeAssistantCitation(citation).replaceAll("+", "%20");
 
 describe("isPathSuggestionCurrent", () => {

@@ -3953,6 +3953,8 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadTodoPanel
+                  threadId={activeThread.id}
+                  planId={activePlan?.id ?? null}
                   steps={activePlan?.steps ?? NO_TODO_STEPS}
                   statusInput={{
                     runStatus: activeRuntime?.status ?? null,

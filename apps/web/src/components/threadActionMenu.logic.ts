@@ -3,6 +3,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 
 export type ThreadActionMenuId =
   | "find"
+  | "clear-session"
   | "new-thread-on-branch"
   | "filter-by-project"
   | "turn-into-project"
@@ -120,6 +121,12 @@ export function buildThreadActionMenuItems(
     ...(state.canFind
       ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
       : []),
+    {
+      id: "clear-session",
+      label: "Clear session (keep in history)",
+      icon: "message-square-plus",
+      separatorBefore: true,
+    },
     ...(state.branch
       ? [
           {
