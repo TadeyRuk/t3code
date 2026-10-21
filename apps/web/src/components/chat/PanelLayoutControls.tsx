@@ -1,4 +1,4 @@
-import { PanelBottomIcon, PanelRightIcon, SquareMenuIcon } from "lucide-react";
+import { FolderTree, PanelBottomIcon, PanelRightIcon, SquareMenuIcon } from "lucide-react";
 import { Maximize2, Minimize2 } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
 import { memo, type ReactElement } from "react";
@@ -11,6 +11,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 export interface PanelLayoutControlsProps {
   showThreadPanelControl?: boolean;
   showTerminalControl?: boolean;
+  showExplorerControl?: boolean;
   showRightPanelControl?: boolean;
   terminalAvailable: boolean;
   terminalOpen: boolean;
@@ -22,15 +23,19 @@ export interface PanelLayoutControlsProps {
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
+  explorerAvailable: boolean;
+  explorerOpen: boolean;
   rightPanelUnavailableLabel?: string;
   onToggleTerminal: () => void;
   onToggleThreadPanel: () => void;
+  onToggleExplorer: () => void;
   onToggleRightPanel: () => void;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
   showThreadPanelControl = true,
   showTerminalControl = true,
+  showExplorerControl = true,
   showRightPanelControl = true,
   terminalAvailable,
   terminalOpen,
@@ -42,9 +47,12 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   rightPanelAvailable,
   rightPanelOpen,
   rightPanelShortcutLabel,
+  explorerAvailable,
+  explorerOpen,
   rightPanelUnavailableLabel = "Right panel is unavailable",
   onToggleTerminal,
   onToggleThreadPanel,
+  onToggleExplorer,
   onToggleRightPanel,
 }: PanelLayoutControlsProps) {
   const threadPanelToggle = (
@@ -102,6 +110,27 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             {terminalAvailable
               ? `Toggle terminal drawer${terminalShortcutLabel ? ` (${terminalShortcutLabel})` : ""}`
               : "Terminal drawer is unavailable"}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
+      {showExplorerControl ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0" />}>
+            <Toggle
+              className="shrink-0 [-webkit-app-region:no-drag]"
+              pressed={explorerOpen}
+              onPressedChange={onToggleExplorer}
+              aria-label="Toggle project Explorer"
+              data-project-explorer-toggle
+              variant="ghost"
+              size="sm"
+              disabled={!explorerAvailable}
+            >
+              <FolderTree className="size-4" />
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">
+            {explorerAvailable ? "Toggle project Explorer" : "Explorer is available in projects"}
           </TooltipPopup>
         </Tooltip>
       ) : null}

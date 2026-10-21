@@ -2687,6 +2687,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           label: "/clear",
           description: "Start a fresh conversation and keep this one in history",
         },
+        {
+          id: "slash:summon",
+          type: "slash-command",
+          command: "summon",
+          label: "/summon",
+          description: "Start a child agent and open its conversation",
+        },
         ...(planModeUiEnabled
           ? ([
               {
@@ -3874,6 +3881,22 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         if (applied) {
           setComposerHighlightedItemId(null);
         }
+        return;
+      }
+      if (item.command === "summon") {
+        const replacement = "/summon ";
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+        );
+        if (applied) setComposerHighlightedItemId(null);
         return;
       }
       if (!planModeUiEnabled) return;

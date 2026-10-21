@@ -1275,6 +1275,8 @@ function PullRequestsRouteView() {
     <PanelLayoutControls
       showTerminalControl={false}
       showThreadPanelControl={false}
+      explorerAvailable={false}
+      explorerOpen={false}
       terminalAvailable={false}
       terminalOpen={false}
       terminalShortcutLabel={null}
@@ -1286,6 +1288,7 @@ function PullRequestsRouteView() {
       rightPanelOpen={rightPanelState.isOpen}
       rightPanelShortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggle")}
       rightPanelUnavailableLabel="Select a pull request first"
+      onToggleExplorer={() => undefined}
       onToggleTerminal={() => undefined}
       onToggleRightPanel={toggleRightPanel}
     />
