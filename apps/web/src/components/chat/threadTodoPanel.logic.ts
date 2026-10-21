@@ -20,6 +20,7 @@ export type TodoPanelStatus =
   | { readonly kind: "waiting"; readonly reason: "approval" | "question" | "other" }
   | { readonly kind: "limit"; readonly resetAt: string | null }
   | { readonly kind: "failed"; readonly message: string | null }
+  | { readonly kind: "unfinished"; readonly remaining: number }
   | { readonly kind: "done" }
   | { readonly kind: "idle" };
 
@@ -35,6 +36,7 @@ export interface TodoPanelStatusInput {
   readonly lastActivityAtMs: number | null;
   readonly nowMs: number;
   readonly allStepsDone: boolean;
+  readonly unfinishedCount: number;
 }
 
 const ACTIVE_RUN_STATUSES: ReadonlySet<string> = new Set([
@@ -58,7 +60,12 @@ export function deriveTodoPanelStatus(input: TodoPanelStatusInput): TodoPanelSta
         ? { kind: "limit", resetAt: input.usageLimitResetAt }
         : { kind: "failed", message: input.lastError };
     }
-    return input.allStepsDone ? { kind: "done" } : { kind: "idle" };
+    if (input.allStepsDone) return { kind: "done" };
+    // A turn can end mid-list, for instance an agent that waits on a background command and is
+    // never woken. The list then still reads "running", so say that nothing is running.
+    return input.unfinishedCount > 0
+      ? { kind: "unfinished", remaining: input.unfinishedCount }
+      : { kind: "idle" };
   }
   if (input.connectionReconnecting) return { kind: "reconnecting" };
   if (input.runStatus === "waiting" || input.waitingOn !== null) {
@@ -67,6 +74,7 @@ export function deriveTodoPanelStatus(input: TodoPanelStatusInput): TodoPanelSta
   if (input.retry !== null) {
     return { kind: "retrying", attempt: input.retry.attempt, maxAttempts: input.retry.maxAttempts };
   }
+  // Only "running": a queued or starting run is quiet by design and must not be called stalled.
   if (input.runStatus === "running" && input.lastActivityAtMs !== null) {
     const quietMs = input.nowMs - input.lastActivityAtMs;
     if (quietMs >= TODO_STALL_THRESHOLD_MS) return { kind: "stalled", quietMs };

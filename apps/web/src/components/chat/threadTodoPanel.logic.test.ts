@@ -20,6 +20,7 @@ function input(overrides: Partial<TodoPanelStatusInput> = {}): TodoPanelStatusIn
     lastActivityAtMs: NOW - 1_000,
     nowMs: NOW,
     allStepsDone: false,
+    unfinishedCount: 0,
     ...overrides,
   };
 }
@@ -103,6 +104,28 @@ describe("deriveTodoPanelStatus", () => {
       ),
     ).toEqual({ kind: "done" });
     expect(deriveTodoPanelStatus(input({ runStatus: "interrupted" }))).toEqual({ kind: "idle" });
+  });
+
+  it("says a finished turn stopped early when tasks are still open", () => {
+    expect(deriveTodoPanelStatus(input({ runStatus: "completed", unfinishedCount: 2 }))).toEqual({
+      kind: "unfinished",
+      remaining: 2,
+    });
+    expect(deriveTodoPanelStatus(input({ runStatus: "interrupted", unfinishedCount: 1 }))).toEqual({
+      kind: "unfinished",
+      remaining: 1,
+    });
+  });
+
+  it("prefers done over unfinished and ignores unfinished while a turn is live", () => {
+    expect(
+      deriveTodoPanelStatus(
+        input({ runStatus: "completed", allStepsDone: true, unfinishedCount: 0 }),
+      ),
+    ).toEqual({ kind: "done" });
+    expect(deriveTodoPanelStatus(input({ runStatus: "running", unfinishedCount: 3 }))).toEqual({
+      kind: "running",
+    });
   });
 
   it("treats a starting run as running rather than stalled", () => {

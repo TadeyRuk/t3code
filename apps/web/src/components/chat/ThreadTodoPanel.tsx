@@ -3,6 +3,7 @@ import { formatDuration as formatResetDuration } from "@t3tools/shared/usageLimi
 import {
   CheckIcon,
   CircleAlertIcon,
+  CirclePauseIcon,
   GaugeIcon,
   PauseIcon,
   RotateCwIcon,
@@ -50,7 +51,7 @@ interface Presentation {
   readonly sub: string;
 }
 
-const ICON_CLASS = "size-3.5 shrink-0";
+const ICON_CLASS = "size-4 shrink-0";
 
 function resetsInLabel(resetAt: string | null, nowMs: number): string {
   if (resetAt === null) return "Check the usage card for the reset time";
@@ -123,6 +124,13 @@ function presentStatus(
         head: "This turn failed",
         sub: status.message ?? "See the thread for details",
       };
+    case "unfinished":
+      return {
+        color: "var(--color-warning)",
+        icon: <CirclePauseIcon className={ICON_CLASS} aria-hidden />,
+        head: `Stopped with ${status.remaining} ${status.remaining === 1 ? "task" : "tasks"} left`,
+        sub: "The turn ended before they were finished",
+      };
     case "done":
       return {
         color: "var(--color-success)",
@@ -142,11 +150,15 @@ function presentStatus(
 function useQuietClock(lastActivityAtMs: number | null, enabled: boolean): number {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const quiet = lastActivityAtMs !== null && nowMs - lastActivityAtMs >= TODO_STALL_THRESHOLD_MS;
+  // `quiet` is an effect dependency only to swap the one-shot timeout for the refresh interval
+  // when silence crosses the threshold; it is not read inside.
   useEffect(() => {
     if (!enabled || lastActivityAtMs === null) return;
     const deadline = lastActivityAtMs + TODO_STALL_THRESHOLD_MS;
     const current = Date.now();
     if (current < deadline) {
+      // The 50ms slack keeps a timer that fires a hair early from re-reading a clock still short of
+      // the threshold, which would leave the panel "running" with nothing left to wake it.
       const timeout = setTimeout(() => setNowMs(Date.now()), deadline - current + 50);
       return () => clearTimeout(timeout);
     }
@@ -163,7 +175,7 @@ function TaskBar({ steps }: { readonly steps: ActivePlanState["steps"] }) {
   const done = steps.filter((step) => step.status === "completed").length;
   const label = `${done} of ${steps.length} steps done`;
   return (
-    <div className="px-4 pb-2.5" role="img" aria-label={label}>
+    <div className="px-1.5 pb-2" role="img" aria-label={label}>
       {steps.length <= MAX_BAR_SEGMENTS ? (
         <div className="flex gap-[3px]">
           {steps.map((step, index) => (
@@ -240,13 +252,14 @@ export function ThreadTodoPanel({
   statusInput,
 }: {
   readonly steps: ActivePlanState["steps"];
-  readonly statusInput: Omit<TodoPanelStatusInput, "nowMs" | "allStepsDone">;
+  readonly statusInput: Omit<TodoPanelStatusInput, "nowMs" | "allStepsDone" | "unfinishedCount">;
 }) {
   const canvas = useChatCanvas();
   const allStepsDone = steps.length > 0 && steps.every((step) => step.status === "completed");
   const runActive = statusInput.runStatus === "running";
   const nowMs = useQuietClock(statusInput.lastActivityAtMs, runActive);
-  const status = deriveTodoPanelStatus({ ...statusInput, nowMs, allStepsDone });
+  const unfinishedCount = steps.filter((step) => step.status !== "completed").length;
+  const status = deriveTodoPanelStatus({ ...statusInput, nowMs, allStepsDone, unfinishedCount });
 
   const activeIndex = steps.findIndex((step) => step.status === "inProgress");
   const activeRowRef = useRef<HTMLLIElement | null>(null);
@@ -288,102 +301,123 @@ export function ThreadTodoPanel({
       data-thread-todo-panel
     >
       <div className="dropdown-glass isolate contain-paint flex max-h-[inherit] flex-col overflow-hidden rounded-3xl">
-        <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1.5">
-          <h3 className="text-[11px] font-medium tracking-[0.02em] text-muted-foreground select-none">
-            Progress
-          </h3>
-          {steps.length > 0 ? (
-            <span className="text-[11px] text-muted-foreground tabular-nums">
-              {done} of {steps.length}
-            </span>
-          ) : null}
-        </div>
-        {steps.length > 0 ? <TaskBar steps={steps} /> : null}
-        {presentation ? (
-          <div
-            role="status"
-            className="mx-2 mb-0.5 flex items-center gap-2.5 rounded-[13px] px-2.5 py-2 text-[11.5px] leading-[1.3]"
-            style={{
-              backgroundColor: `color-mix(in srgb, ${presentation.color} 14%, transparent)`,
-            }}
-          >
-            <span
-              className="flex size-3.5 shrink-0 items-center justify-center"
-              style={{ color: presentation.color }}
-            >
-              {presentation.icon ?? (
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 rounded-full"
-                  style={{ backgroundColor: presentation.color }}
-                />
-              )}
-            </span>
-            <span className="min-w-0">
-              <span className="block font-semibold text-foreground">{presentation.head}</span>
-              <span className="mt-px block text-[10.5px] text-muted-foreground">
-                {presentation.sub}
+        {/* Type and spacing follow the thread details card beside it: 2xs muted section titles,
+            13px medium rows at least 32px tall, 16px icons, muted xs meta on the right. */}
+        <section className="shrink-0 px-2 pt-2 pb-2">
+          <div className="flex min-h-8 items-center justify-between gap-2 px-1.5">
+            <h3 className="min-w-0 truncate text-2xs font-medium text-muted-foreground select-none">
+              Progress
+            </h3>
+            {steps.length > 0 ? (
+              <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+                {done} of {steps.length}
               </span>
-            </span>
+            ) : null}
           </div>
-        ) : null}
-        {showEmptyNote ? (
-          <div className="px-4 pt-0.5 pb-3.5">
-            <p className="m-0 text-xs leading-[1.3] font-medium text-foreground">Nothing's up</p>
-            <p className="m-0 mt-0.5 text-[11px] leading-[1.4] text-muted-foreground">
-              When an agent plans a to-do list, it shows up here.
-            </p>
-          </div>
-        ) : null}
-        <ol
-          className={cn(
-            "m-0 min-h-0 list-none overflow-y-auto overscroll-contain px-3.5",
-            steps.length > 0 ? "pt-2.5 pb-3.5" : "pb-1.5",
-          )}
-        >
-          {steps.map((step, index) => {
-            const last = index === steps.length - 1;
-            const active = index === activeIndex;
-            return (
-              <li
-                key={`${index}:${step.step}`}
-                ref={active ? activeRowRef : undefined}
-                className={cn("relative flex gap-2.5 text-xs leading-[1.3]", !last && "pb-[11px]")}
+          {steps.length > 0 ? <TaskBar steps={steps} /> : null}
+          {presentation ? (
+            <div
+              role="status"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"
+              style={{
+                backgroundColor: `color-mix(in srgb, ${presentation.color} 14%, transparent)`,
+              }}
+            >
+              <span
+                className="flex size-4 shrink-0 items-center justify-center"
+                style={{ color: presentation.color }}
               >
-                {last ? null : (
+                {presentation.icon ?? (
                   <span
                     aria-hidden="true"
-                    className={cn(
-                      "absolute top-[18px] -bottom-0.5 left-[7.25px] w-[1.5px]",
-                      step.status === "completed" ? "bg-success/55" : "bg-muted-foreground/25",
-                    )}
+                    className="size-1.5 rounded-full"
+                    style={{ backgroundColor: presentation.color }}
                   />
                 )}
-                <StepNode
-                  status={step.status}
-                  color={presentation?.color ?? "var(--color-foreground)"}
-                  icon={presentation?.icon ?? null}
-                />
-                <span className="min-w-0 flex-1">
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] leading-4 font-medium text-foreground">
+                  {presentation.head}
+                </span>
+                <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
+                  {presentation.sub}
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {showEmptyNote ? (
+            <div className="px-2.5 pt-0.5 pb-1.5">
+              <p className="m-0 text-[13px] leading-4 font-medium text-foreground/80">
+                Nothing's up
+              </p>
+              <p className="m-0 mt-0.5 text-xs leading-4 text-muted-foreground">
+                When an agent plans a to-do list, it shows up here.
+              </p>
+            </div>
+          ) : null}
+        </section>
+        {steps.length > 0 ? (
+          <ol className="m-0 min-h-0 list-none overflow-y-auto overscroll-contain border-t border-border/65 px-2 pt-2 pb-2.5">
+            {steps.map((step, index) => {
+              const first = index === 0;
+              const last = index === steps.length - 1;
+              const active = index === activeIndex;
+              const previousDone = steps[index - 1]?.status === "completed";
+              const thisDone = step.status === "completed";
+              return (
+                <li
+                  // Agents repeat step text ("Run tests" twice), so the text alone is not a unique key.
+                  key={`${index}:${step.step}`}
+                  ref={active ? activeRowRef : undefined}
+                  className="relative flex min-h-8 items-center gap-2.5 rounded-lg px-2.5 py-1"
+                >
+                  {/* The node sits at the row's vertical centre, so the connector is two halves
+                      that meet the neighbouring rows' halves; the finished stretch turns green. */}
+                  {first ? null : (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "absolute top-0 left-[18px] h-[calc(50%-10px)] w-[1.5px] -translate-x-1/2",
+                        previousDone ? "bg-success/55" : "bg-muted-foreground/25",
+                      )}
+                    />
+                  )}
+                  {last ? null : (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "absolute bottom-0 left-[18px] h-[calc(50%-10px)] w-[1.5px] -translate-x-1/2",
+                        thisDone ? "bg-success/55" : "bg-muted-foreground/25",
+                      )}
+                    />
+                  )}
+                  <StepNode
+                    status={step.status}
+                    color={presentation?.color ?? "var(--color-foreground)"}
+                    icon={presentation?.icon ?? null}
+                  />
                   <span
                     className={cn(
-                      "block [overflow-wrap:anywhere]",
-                      step.status === "pending" && "text-muted-foreground",
-                      step.status === "inProgress" && "font-semibold",
+                      "min-w-0 flex-1 text-[13px] leading-[1.35] font-medium [overflow-wrap:anywhere]",
+                      step.status === "pending"
+                        ? "text-muted-foreground"
+                        : step.status === "inProgress"
+                          ? "text-foreground"
+                          : "text-foreground/80",
                     )}
                   >
                     {step.step}
                   </span>
                   {step.status === "completed" && step.durationMs !== undefined ? (
-                    <span className="mt-0.5 block text-[10.5px] text-muted-foreground tabular-nums">
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
                       {formatStepDuration(step.durationMs)}
                     </span>
                   ) : null}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+                </li>
+              );
+            })}
+          </ol>
+        ) : null}
       </div>
     </aside>
   );
