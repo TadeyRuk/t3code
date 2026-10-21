@@ -1,5 +1,5 @@
 import { resolveTimelineMinimapPreview, type TimelineMinimapItem } from "./timelineMinimapItems";
-import { useRef, useState, type MouseEvent } from "react";
+import { useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -8,6 +8,7 @@ import {
   resolveTimelineMinimapNavigationInteractive,
   resolveTimelineMinimapTopPercent,
   TIMELINE_MINIMAP_MIN_ITEMS,
+  TIMELINE_MINIMAP_RESTING_HEIGHT,
 } from "./MessagesTimeline.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -117,7 +118,12 @@ export function TimelineMinimap({
       <div className="relative h-full w-full select-none">
         <div
           className={cn(
-            "absolute top-1/2 left-3 -translate-y-1/2",
+            // Rests as a short window that follows the current message, and opens to the full
+            // rail while hovered or focused. The clip and fade only apply while resting, so the
+            // preview card can extend past the rail once it opens.
+            "group/rail absolute top-1/2 left-3 -translate-y-1/2 h-(--rail-resting) overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,#000_22%,#000_78%,transparent)]",
+            "transition-[height] duration-200 ease-out motion-reduce:transition-none",
+            "hover:h-(--rail-full) hover:overflow-visible hover:[mask-image:none] focus-within:h-(--rail-full) focus-within:overflow-visible focus-within:[mask-image:none]",
             hitStripWidth > 0 && !passThrough ? "pointer-events-auto" : "pointer-events-none",
           )}
           onMouseDown={() => {
@@ -132,10 +138,17 @@ export function TimelineMinimap({
             setPassThrough(true);
             onMouseButtonsReleased(() => setPassThrough(false));
           }}
-          style={{
-            height: resolveTimelineMinimapHeightStyle(items.length),
-            width: hitStripWidth,
-          }}
+          style={
+            {
+              "--rail-full": resolveTimelineMinimapHeightStyle(items.length),
+              "--rail-resting": `min(var(--rail-full), ${TIMELINE_MINIMAP_RESTING_HEIGHT})`,
+              // Keeps the current message centred in the resting window, never past either end.
+              "--rail-shift": `clamp(calc(var(--rail-resting) - var(--rail-full)), calc(var(--rail-resting) / 2 - ${
+                resolveTimelineMinimapTopPercent(resolvedCurrentIndex ?? 0, items.length) / 100
+              } * var(--rail-full)), 0px)`,
+              width: hitStripWidth,
+            } as CSSProperties
+          }
         >
           <TimelineMinimapNavigationButton
             direction="previous"
@@ -145,6 +158,7 @@ export function TimelineMinimap({
               if (previousItem) onSelect(previousItem);
             }}
           />
+          <div className="absolute inset-x-0 top-0 h-(--rail-full) translate-y-(--rail-shift) transition-transform duration-200 ease-out group-hover/rail:translate-y-0 group-focus-within/rail:translate-y-0 motion-reduce:transition-none">
           <button
             aria-label={`Jump to message: ${activeItem?.userText ?? "User message"}`}
             className="absolute inset-y-0 left-0 w-full cursor-pointer bg-transparent before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
@@ -249,6 +263,7 @@ export function TimelineMinimap({
               </span>
             ) : null}
           </button>
+          </div>
           <TimelineMinimapNavigationButton
             direction="next"
             disabled={nextItem === null}
