@@ -3960,6 +3960,8 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadTodoPanel
+                  threadId={activeThread.id}
+                  planId={activePlan?.id ?? null}
                   steps={activePlan?.steps ?? NO_TODO_STEPS}
                   statusInput={{
                     runStatus: activeRuntime?.status ?? null,
@@ -3984,7 +3986,10 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadUsageCard
-                  threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
+                  threadRef={{
+                    environmentId: activeThread.environmentId,
+                    threadId: activeThread.id,
+                  }}
                   contextWindow={activeContextWindow}
                   providerInstanceId={activeProviderInstanceId}
                   providers={providerStatuses}

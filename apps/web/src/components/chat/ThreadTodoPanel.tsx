@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 
+import type { PlanId, ThreadId } from "@t3tools/contracts";
 import { cn } from "../../lib/utils";
+import { Button } from "../ui/button";
 import { useChatCanvas } from "./ChatCanvasContext";
 import {
   type ActivePlanState,
@@ -31,6 +33,7 @@ const PANEL_MIN_WIDTH = 208;
 // Clears the timeline scrubber's resting ticks, which sit at 12px to 36px.
 const PANEL_LEFT = 40;
 const PANEL_CLEARANCE = 16;
+const DISMISSED_TODO_PLAN_STORAGE_KEY = "t3code:todo-panel-dismissed:v1";
 
 type StepStatus = ActivePlanState["steps"][number]["status"];
 
@@ -59,6 +62,18 @@ function resetsInLabel(resetAt: string | null, nowMs: number): string {
   return remaining > 0
     ? `Resets in ${formatResetDuration(remaining)}`
     : "Should be available again";
+}
+
+function dismissedPlanStorageKey(threadId: ThreadId): string {
+  return `${DISMISSED_TODO_PLAN_STORAGE_KEY}:${threadId}`;
+}
+
+function readDismissedPlanId(threadId: ThreadId): PlanId | null {
+  try {
+    return window.localStorage.getItem(dismissedPlanStorageKey(threadId)) as PlanId | null;
+  } catch {
+    return null;
+  }
 }
 
 function presentStatus(
@@ -150,22 +165,30 @@ function presentStatus(
 function useQuietClock(lastActivityAtMs: number | null, enabled: boolean): number {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const quiet = lastActivityAtMs !== null && nowMs - lastActivityAtMs >= TODO_STALL_THRESHOLD_MS;
-  // `quiet` is an effect dependency only to swap the one-shot timeout for the refresh interval
-  // when silence crosses the threshold; it is not read inside.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- owns the stall timer: one timeout to the threshold, then a coarse refresh
   useEffect(() => {
     if (!enabled || lastActivityAtMs === null) return;
-    const deadline = lastActivityAtMs + TODO_STALL_THRESHOLD_MS;
-    const current = Date.now();
-    if (current < deadline) {
-      // The 50ms slack keeps a timer that fires a hair early from re-reading a clock still short of
-      // the threshold, which would leave the panel "running" with nothing left to wake it.
-      const timeout = setTimeout(() => setNowMs(Date.now()), deadline - current + 50);
-      return () => clearTimeout(timeout);
+    if (quiet) {
+      const interval = setInterval(() => setNowMs(Date.now()), TODO_STALL_REFRESH_MS);
+      return () => clearInterval(interval);
     }
-    const interval = setInterval(() => setNowMs(Date.now()), TODO_STALL_REFRESH_MS);
-    return () => clearInterval(interval);
+    // The 50ms slack keeps a timer that fires a hair early from re-reading a clock still short of
+    // the threshold, which would leave the panel "running" with nothing left to wake it.
+    const delay = Math.max(0, lastActivityAtMs + TODO_STALL_THRESHOLD_MS - Date.now()) + 50;
+    const timeout = setTimeout(() => setNowMs(Date.now()), delay);
+    return () => clearTimeout(timeout);
   }, [enabled, lastActivityAtMs, quiet]);
   return nowMs;
+}
+
+/** Agents repeat step text ("Run tests" twice), so a key pairs the text with its occurrence. */
+function keyedSteps(steps: ActivePlanState["steps"]) {
+  const seen = new Map<string, number>();
+  return steps.map((step) => {
+    const occurrence = seen.get(step.step) ?? 0;
+    seen.set(step.step, occurrence + 1);
+    return { step, key: `${occurrence}:${step.step}` };
+  });
 }
 
 // Past this many steps the segments would be slivers, so the bar fills continuously instead.
@@ -177,10 +200,10 @@ function TaskBar({ steps }: { readonly steps: ActivePlanState["steps"] }) {
   return (
     <div className="px-1.5 pb-2" role="img" aria-label={label}>
       {steps.length <= MAX_BAR_SEGMENTS ? (
-        <div className="flex gap-[3px]">
-          {steps.map((step, index) => (
+        <div className="flex gap-0.75">
+          {keyedSteps(steps).map(({ step, key }) => (
             <span
-              key={index}
+              key={key}
               className={cn(
                 "h-1 min-w-0 flex-1 rounded-full",
                 step.status === "completed"
@@ -224,14 +247,14 @@ function StepNode({
     return (
       <span
         aria-hidden="true"
-        className="relative z-1 size-4 shrink-0 rounded-full border-[1.5px] border-muted-foreground/55 bg-popover"
+        className="relative z-1 size-4 shrink-0 rounded-full border border-muted-foreground/55 bg-popover"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="relative z-1 flex size-4 shrink-0 items-center justify-center rounded-full border-[1.75px] bg-popover"
+      className="relative z-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2 bg-popover"
       style={{ borderColor: color, color } as CSSProperties}
     >
       {icon ? (
@@ -248,25 +271,40 @@ function StepNode({
  * needs no layout pass of its own and steps aside when that lane is too narrow.
  */
 export function ThreadTodoPanel({
+  threadId,
+  planId,
   steps,
   statusInput,
 }: {
+  readonly threadId: ThreadId;
+  readonly planId: PlanId | null;
   readonly steps: ActivePlanState["steps"];
   readonly statusInput: Omit<TodoPanelStatusInput, "nowMs" | "allStepsDone" | "unfinishedCount">;
 }) {
   const canvas = useChatCanvas();
+  // Keyed by thread so switching threads reads that thread's dismissal instead of carrying this one.
+  const [dismissal, setDismissal] = useState(() => ({
+    threadId,
+    planId: readDismissedPlanId(threadId),
+  }));
+  const dismissedPlanId =
+    dismissal.threadId === threadId ? dismissal.planId : readDismissedPlanId(threadId);
   const allStepsDone = steps.length > 0 && steps.every((step) => step.status === "completed");
   const runActive = statusInput.runStatus === "running";
   const nowMs = useQuietClock(statusInput.lastActivityAtMs, runActive);
+
   const unfinishedCount = steps.filter((step) => step.status !== "completed").length;
   const status = deriveTodoPanelStatus({ ...statusInput, nowMs, allStepsDone, unfinishedCount });
 
   const activeIndex = steps.findIndex((step) => step.status === "inProgress");
   const activeRowRef = useRef<HTMLLIElement | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the list's DOM to keep the active step in view
   useEffect(() => {
+    if (activeIndex < 0) return;
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
+  if (allStepsDone && planId !== null && dismissedPlanId === planId) return null;
   if (!canvas) return null;
   const gap = THREAD_DETAILS_CARD_GAP;
   // The lane bound is a fallback only: it can be far narrower than the column you see.
@@ -287,6 +325,15 @@ export function ThreadTodoPanel({
       : presentStatus(status, { done, total: steps.length }, nowMs);
   const showEmptyNote = noList && presentation === null;
   const top = gap + canvas.detailsCardTopInset;
+  const clearCompletedPlan = () => {
+    if (planId === null) return;
+    setDismissal({ threadId, planId });
+    try {
+      window.localStorage.setItem(dismissedPlanStorageKey(threadId), planId);
+    } catch {
+      // Dismiss in the current view even when browser storage is unavailable.
+    }
+  };
 
   return (
     <aside
@@ -309,47 +356,60 @@ export function ThreadTodoPanel({
               Progress
             </h3>
             {steps.length > 0 ? (
-              <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
-                {done} of {steps.length}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                  {done} of {steps.length}
+                </span>
+              </div>
             ) : null}
           </div>
           {steps.length > 0 ? <TaskBar steps={steps} /> : null}
           {presentation ? (
             <div
-              role="status"
               className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"
               style={{
                 backgroundColor: `color-mix(in srgb, ${presentation.color} 14%, transparent)`,
               }}
             >
-              <span
-                className="flex size-4 shrink-0 items-center justify-center"
-                style={{ color: presentation.color }}
-              >
-                {presentation.icon ?? (
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full"
-                    style={{ backgroundColor: presentation.color }}
-                  />
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13px] leading-4 font-medium text-foreground">
-                  {presentation.head}
+              <div role="status" className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center"
+                  style={{ color: presentation.color }}
+                >
+                  {presentation.icon ?? (
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 rounded-full"
+                      style={{ backgroundColor: presentation.color }}
+                    />
+                  )}
                 </span>
-                <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
-                  {presentation.sub}
+                <span className="min-w-0">
+                  <span className="block text-sm leading-4 font-medium text-foreground">
+                    {presentation.head}
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
+                    {presentation.sub}
+                  </span>
                 </span>
-              </span>
+              </div>
+              {allStepsDone && planId !== null ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="ml-auto shrink-0"
+                  aria-label="Clear completed task list"
+                  onClick={clearCompletedPlan}
+                >
+                  Clear
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {showEmptyNote ? (
             <div className="px-2.5 pt-0.5 pb-1.5">
-              <p className="m-0 text-[13px] leading-4 font-medium text-foreground/80">
-                Nothing's up
-              </p>
+              <p className="m-0 text-sm leading-4 font-medium text-foreground/80">Nothing's up</p>
               <p className="m-0 mt-0.5 text-xs leading-4 text-muted-foreground">
                 When an agent plans a to-do list, it shows up here.
               </p>
@@ -358,7 +418,7 @@ export function ThreadTodoPanel({
         </section>
         {steps.length > 0 ? (
           <ol className="m-0 min-h-0 list-none overflow-y-auto overscroll-contain border-t border-border/65 px-2 pt-2 pb-2.5">
-            {steps.map((step, index) => {
+            {keyedSteps(steps).map(({ step, key }, index) => {
               const first = index === 0;
               const last = index === steps.length - 1;
               const active = index === activeIndex;
@@ -366,8 +426,7 @@ export function ThreadTodoPanel({
               const thisDone = step.status === "completed";
               return (
                 <li
-                  // Agents repeat step text ("Run tests" twice), so the text alone is not a unique key.
-                  key={`${index}:${step.step}`}
+                  key={key}
                   ref={active ? activeRowRef : undefined}
                   className="relative flex min-h-8 items-center gap-2.5 rounded-lg px-2.5 py-1"
                 >
@@ -398,7 +457,7 @@ export function ThreadTodoPanel({
                   />
                   <span
                     className={cn(
-                      "min-w-0 flex-1 text-[13px] leading-[1.35] font-medium [overflow-wrap:anywhere]",
+                      "min-w-0 flex-1 text-sm leading-snug font-medium [overflow-wrap:anywhere]",
                       step.status === "pending"
                         ? "text-muted-foreground"
                         : step.status === "inProgress"
