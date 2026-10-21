@@ -31,6 +31,16 @@ const PANEL_CLEARANCE = 20;
 
 type StepStatus = ActivePlanState["steps"][number]["status"];
 
+const ENDED_STATUS_KINDS: ReadonlySet<TodoPanelStatus["kind"]> = new Set([
+  "idle",
+  "done",
+  "failed",
+  "limit",
+]);
+
+/** A stable empty list, so a thread without a to-do list does not re-render the panel each time. */
+export const NO_TODO_STEPS: ActivePlanState["steps"] = [];
+
 interface Presentation {
   readonly color: string;
   readonly icon: ReactNode | null;
@@ -59,7 +69,10 @@ function presentStatus(
         color: "var(--color-foreground)",
         icon: null,
         head: "Running",
-        sub: `Step ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`,
+        sub:
+          progress.total === 0
+            ? "No to-do list yet; it appears when the agent makes one"
+            : `Step ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`,
       };
     case "retrying":
       return {
@@ -203,7 +216,10 @@ export function ThreadTodoPanel({
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  if (!canvas || steps.length === 0) return null;
+  if (!canvas) return null;
+  // With no list, only a live turn has anything to say, such as a dropped connection or a stall.
+  // A failure from an old turn would otherwise greet every visit to the thread.
+  if (steps.length === 0 && ENDED_STATUS_KINDS.has(status.kind)) return null;
   const gap = THREAD_DETAILS_CARD_GAP;
   if (canvas.layout.chat.left < PANEL_LEFT + PANEL_WIDTH + PANEL_CLEARANCE) return null;
 
@@ -228,9 +244,11 @@ export function ThreadTodoPanel({
           <h3 className="text-[11px] font-medium tracking-[0.02em] text-muted-foreground select-none">
             Progress
           </h3>
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            {done} of {steps.length}
-          </span>
+          {steps.length > 0 ? (
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {done} of {steps.length}
+            </span>
+          ) : null}
         </div>
         {presentation ? (
           <div
@@ -260,7 +278,12 @@ export function ThreadTodoPanel({
             </span>
           </div>
         ) : null}
-        <ol className="m-0 min-h-0 list-none overflow-y-auto overscroll-contain px-3.5 pt-2.5 pb-3.5">
+        <ol
+          className={cn(
+            "m-0 min-h-0 list-none overflow-y-auto overscroll-contain px-3.5",
+            steps.length > 0 ? "pt-2.5 pb-3.5" : "pb-1.5",
+          )}
+        >
           {steps.map((step, index) => {
             const last = index === steps.length - 1;
             const active = index === activeIndex;
