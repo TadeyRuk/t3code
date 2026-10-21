@@ -325,9 +325,14 @@ export function ThreadUsageCard({
     (canvas.detailsCardBottom === null ||
       canvas.container.height - bottom - height >= canvas.detailsCardBottom + gap);
   const now = report ? Date.parse(report.createdAt) : 0;
-  // One account is the common case; with several, the first usable one speaks for the provider.
+  // The report lists every account of this driver (personal and work Claude logins alike), so
+  // pick the selected instance's own. Two instances on one login are merged under one instanceId,
+  // hence the email fallback. No match shows no limits rather than another account's.
+  const selectedEmail = provider?.auth.email;
   const account =
-    report?.accounts.find((entry) => limitsNotice(entry.limits) === null) ?? report?.accounts[0];
+    report?.accounts.find((entry) => entry.instanceId === providerInstanceId) ??
+    (selectedEmail ? report?.accounts.find((entry) => entry.email === selectedEmail) : undefined);
+  const plan = provider?.auth.label ?? account?.plan;
   const notice = account ? limitsNotice(account.limits) : null;
   const windows = account && notice === null ? account.limits.windows : [];
 
@@ -355,7 +360,7 @@ export function ThreadUsageCard({
           {provider && providerLabel ? (
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground"
-              title={account?.plan ? `${providerLabel} · ${account.plan}` : providerLabel}
+              title={plan ? `${providerLabel} · ${plan}` : providerLabel}
             >
               <span className={cn("inline-flex", brandColor.className)} style={brandColor.style}>
                 <ProviderInstanceIcon
@@ -366,7 +371,7 @@ export function ThreadUsageCard({
                 />
               </span>
               <span className="sr-only">{providerLabel}</span>
-              {account?.plan ? <span className="truncate">{account.plan}</span> : null}
+              {plan ? <span className="truncate">{plan}</span> : null}
             </span>
           ) : null}
         </div>
