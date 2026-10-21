@@ -153,6 +153,10 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
   readonly label: string | null;
   readonly rows: ReadonlyArray<Row>;
   readonly expanded: boolean;
+  /** Overrides the row count, for agents that run without a thread row of their own. */
+  readonly count?: number;
+  /** Keeps the count beside the label while expanded, and the header when there are no rows. */
+  readonly persistent?: boolean;
   readonly children: (rows: ReadonlyArray<Row>) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(props.expanded);
@@ -162,7 +166,24 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
     const status = lineageRowStatus(row);
     return status === "failed" || status === "error";
   }).length;
-  if (props.rows.length === 0) return null;
+  const count = props.count ?? props.rows.length;
+  if (props.rows.length === 0) {
+    if (!props.persistent || !props.label) return null;
+    return (
+      <div
+        className="flex h-8 w-full items-center gap-2 ps-2 pe-2.5 text-xs font-medium text-muted-foreground"
+        aria-label={`${props.label}: ${count}`}
+      >
+        <BotIcon aria-hidden className={THREAD_DETAILS_PANEL_ICON_CLASS} />
+        <span className={cn(THREAD_DETAILS_PANEL_LABEL_CLASS, "min-w-0 flex-1 truncate")}>
+          {props.label}
+        </span>
+        <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      </div>
+    );
+  }
   return (
     <div>
       {props.label ? (
@@ -172,11 +193,11 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
             {props.label}
           </span>
           {failedCount > 0 ? <SectionHeaderStatus>{failedCount} failed</SectionHeaderStatus> : null}
-          {expanded ? null : (
+          {props.persistent || !expanded ? (
             <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
-              {props.rows.length}
+              {count}
             </span>
-          )}
+          ) : null}
           <ChevronDownIcon
             aria-hidden
             className={cn(
@@ -592,9 +613,27 @@ export function ThreadRelationshipsPanel(props: {
     label: string | null;
     rows: ReadonlyArray<LineageRow>;
     expanded: boolean;
+    count?: number;
+    persistent?: boolean;
   }> = [
     { id: "related", label: null, rows: related, expanded: true },
-    { id: "active", label: null, rows: [...active, ...remoteActive], expanded: true },
+    // "Active" means still holding a live provider process, so a waiting agent counts too.
+    {
+      id: "active",
+      label: "Active agents",
+      rows: [...active, ...remoteActive],
+      expanded: true,
+      count:
+        active.length +
+        remoteActive.length +
+        (projection?.subagents.filter(
+          (agent) =>
+            agent.childThreadId === null &&
+            agent.remoteChild === undefined &&
+            isOrchestrationV2WorkActive(agent.status),
+        ).length ?? 0),
+      persistent: true,
+    },
     {
       id: "previous",
       label: "Previous agents",
@@ -610,17 +649,8 @@ export function ThreadRelationshipsPanel(props: {
   // A linked environment's agent may have delegated this thread from there.
   const delegatedFrom = currentThread?.delegatedFrom;
 
-  const lineageVisible =
-    props.showLineage &&
-    (related.length > 0 ||
-      active.length > 0 ||
-      previous.length > 0 ||
-      runningCount > 0 ||
-      remoteActive.length > 0 ||
-      remotePrevious.length > 0 ||
-      delegatedFrom !== undefined ||
-      // Disconnect lives in this heading, so a thread with only side chats still shows it.
-      (canDetach && sideChats.length > 0));
+  // The active agent count stays in view, so lineage shows whenever it is enabled.
+  const lineageVisible = props.showLineage;
   const sideChatsVisible = props.showSideChats && sideChats.length > 0;
   const runningSideChats = sideChats.filter(({ edge }) => edge.status === "running").length;
 
