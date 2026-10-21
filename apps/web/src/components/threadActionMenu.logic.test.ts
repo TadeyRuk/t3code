@@ -26,6 +26,14 @@ const baseState: ThreadActionMenuState = {
 };
 
 describe("buildThreadActionMenuItems", () => {
+  it("offers a fresh session while making it clear the current thread stays in history", () => {
+    const clearSession = buildThreadActionMenuItems(baseState).find(
+      (item) => item.id === "clear-session",
+    );
+
+    expect(clearSession?.label).toBe("Clear session (keep in history)");
+  });
+
   it.each([false, true])(
     "disables both lifecycle directions without permission (reversed: %s)",
     (reversed) => {
@@ -38,6 +46,7 @@ describe("buildThreadActionMenuItems", () => {
       });
       const expected = reversed
         ? [
+            "clear-session",
             "unpin",
             "unsettle",
             "unsnooze",
@@ -48,6 +57,7 @@ describe("buildThreadActionMenuItems", () => {
             "delete",
           ]
         : [
+            "clear-session",
             "pin",
             "settle",
             "snooze",

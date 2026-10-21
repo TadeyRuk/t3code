@@ -12,8 +12,10 @@ import {
 } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 
+import type { PlanId, ThreadId } from "@t3tools/contracts";
 import type { ActivePlanState } from "../../session-logic";
 import { cn } from "../../lib/utils";
+import { Button } from "../ui/button";
 import { useChatCanvas } from "./ChatCanvasContext";
 import {
   TODO_STALL_REFRESH_MS,
@@ -31,6 +33,7 @@ const PANEL_MIN_WIDTH = 208;
 // Clears the timeline scrubber's resting ticks, which sit at 12px to 36px.
 const PANEL_LEFT = 40;
 const PANEL_CLEARANCE = 16;
+const DISMISSED_TODO_PLAN_STORAGE_KEY = "t3code:todo-panel-dismissed:v1";
 
 type StepStatus = ActivePlanState["steps"][number]["status"];
 
@@ -59,6 +62,18 @@ function resetsInLabel(resetAt: string | null, nowMs: number): string {
   return remaining > 0
     ? `Resets in ${formatResetDuration(remaining)}`
     : "Should be available again";
+}
+
+function dismissedPlanStorageKey(threadId: ThreadId): string {
+  return `${DISMISSED_TODO_PLAN_STORAGE_KEY}:${threadId}`;
+}
+
+function readDismissedPlanId(threadId: ThreadId): PlanId | null {
+  try {
+    return window.localStorage.getItem(dismissedPlanStorageKey(threadId)) as PlanId | null;
+  } catch {
+    return null;
+  }
 }
 
 function presentStatus(
@@ -248,16 +263,25 @@ function StepNode({
  * needs no layout pass of its own and steps aside when that lane is too narrow.
  */
 export function ThreadTodoPanel({
+  threadId,
+  planId,
   steps,
   statusInput,
 }: {
+  readonly threadId: ThreadId;
+  readonly planId: PlanId | null;
   readonly steps: ActivePlanState["steps"];
   readonly statusInput: Omit<TodoPanelStatusInput, "nowMs" | "allStepsDone" | "unfinishedCount">;
 }) {
   const canvas = useChatCanvas();
+  const [dismissedPlanId, setDismissedPlanId] = useState(() => readDismissedPlanId(threadId));
   const allStepsDone = steps.length > 0 && steps.every((step) => step.status === "completed");
   const runActive = statusInput.runStatus === "running";
   const nowMs = useQuietClock(statusInput.lastActivityAtMs, runActive);
+
+  useEffect(() => {
+    setDismissedPlanId(readDismissedPlanId(threadId));
+  }, [threadId]);
   const unfinishedCount = steps.filter((step) => step.status !== "completed").length;
   const status = deriveTodoPanelStatus({ ...statusInput, nowMs, allStepsDone, unfinishedCount });
 
@@ -267,6 +291,7 @@ export function ThreadTodoPanel({
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
+  if (allStepsDone && planId !== null && dismissedPlanId === planId) return null;
   if (!canvas) return null;
   const gap = THREAD_DETAILS_CARD_GAP;
   // The lane bound is a fallback only: it can be far narrower than the column you see.
@@ -287,6 +312,15 @@ export function ThreadTodoPanel({
       : presentStatus(status, { done, total: steps.length }, nowMs);
   const showEmptyNote = noList && presentation === null;
   const top = gap + canvas.detailsCardTopInset;
+  const clearCompletedPlan = () => {
+    if (planId === null) return;
+    setDismissedPlanId(planId);
+    try {
+      window.localStorage.setItem(dismissedPlanStorageKey(threadId), planId);
+    } catch {
+      // Dismiss in the current view even when browser storage is unavailable.
+    }
+  };
 
   return (
     <aside
@@ -309,40 +343,55 @@ export function ThreadTodoPanel({
               Progress
             </h3>
             {steps.length > 0 ? (
-              <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
-                {done} of {steps.length}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                  {done} of {steps.length}
+                </span>
+              </div>
             ) : null}
           </div>
           {steps.length > 0 ? <TaskBar steps={steps} /> : null}
           {presentation ? (
             <div
-              role="status"
               className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"
               style={{
                 backgroundColor: `color-mix(in srgb, ${presentation.color} 14%, transparent)`,
               }}
             >
-              <span
-                className="flex size-4 shrink-0 items-center justify-center"
-                style={{ color: presentation.color }}
-              >
-                {presentation.icon ?? (
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full"
-                    style={{ backgroundColor: presentation.color }}
-                  />
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13px] leading-4 font-medium text-foreground">
-                  {presentation.head}
+              <div role="status" className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center"
+                  style={{ color: presentation.color }}
+                >
+                  {presentation.icon ?? (
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 rounded-full"
+                      style={{ backgroundColor: presentation.color }}
+                    />
+                  )}
                 </span>
-                <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
-                  {presentation.sub}
+                <span className="min-w-0">
+                  <span className="block text-[13px] leading-4 font-medium text-foreground">
+                    {presentation.head}
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
+                    {presentation.sub}
+                  </span>
                 </span>
-              </span>
+              </div>
+              {allStepsDone && planId !== null ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="ml-auto shrink-0"
+                  aria-label="Clear completed task list"
+                  onClick={clearCompletedPlan}
+                >
+                  Clear
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {showEmptyNote ? (

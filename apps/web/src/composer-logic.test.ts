@@ -22,6 +22,7 @@ import {
   formatAssistantCitationForComposer,
   isCollapsedCursorAdjacentToInlineToken,
   isPathSuggestionCurrent,
+  parseStandaloneComposerSlashCommand,
   replaceTextRange,
 } from "./composer-logic";
 import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
@@ -45,6 +46,14 @@ const citation: AssistantCitation = {
   prefix: "前: ",
   suffix: " 後",
 };
+
+describe("parseStandaloneComposerSlashCommand", () => {
+  it("recognizes /clear as a standalone app command", () => {
+    expect(parseStandaloneComposerSlashCommand("/clear")).toBe("clear");
+    expect(parseStandaloneComposerSlashCommand(" /CLEAR ")).toBe("clear");
+    expect(parseStandaloneComposerSlashCommand("/clear this too")).toBeNull();
+  });
+});
 const citationSource = serializeAssistantCitation(citation).replaceAll("+", "%20");
 
 describe("isPathSuggestionCurrent", () => {

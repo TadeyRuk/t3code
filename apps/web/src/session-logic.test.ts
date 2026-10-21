@@ -1086,6 +1086,7 @@ describe("composer tasks drawer", () => {
   }
 
   const openList = {
+    id: PlanId.make("plan:run-1"),
     createdAt: "2026-06-20T00:00:00.000Z",
     runId: RunId.make("run-1"),
     steps: [

@@ -1980,9 +1980,8 @@ export default function ChatView(props: ChatViewProps) {
     };
   })() as ComposerBannerStackItem | null;
   const activeProjectDefaultModelSelection = activeProjectSettings.settings.defaultModelSelection;
-  const handleNewThreadInActiveProject = () => {
+  const handleNewThreadInActiveProject = () =>
     startNewThreadForProject(activeProjectRef, handleNewThread);
-  };
   const handleNewThreadInActiveProjectStable = useStableCallback(handleNewThreadInActiveProject);
   const projectGroupingSettings = selectProjectGroupingSettings(settings);
   const activeDraftLogicalProjectKey =
@@ -6531,7 +6530,6 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
     const standaloneSlashCommand =
-      sendInteractionModeEnabled &&
       composerImages.length === 0 &&
       composerFiles.length === 0 &&
       sendableComposerTerminalContexts.length === 0 &&
@@ -6540,7 +6538,27 @@ export default function ChatView(props: ChatViewProps) {
       composerThreadContexts.length === 0
         ? parseStandaloneComposerSlashCommand(trimmed)
         : null;
-    if (standaloneSlashCommand && multipleModelSelections === null) {
+    if (standaloneSlashCommand === "clear") {
+      if (!handleNewThreadInActiveProject()) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Choose a project first",
+            description: "A fresh session needs a project or scratch workspace.",
+          }),
+        );
+        return;
+      }
+      promptRef.current = "";
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+      return;
+    }
+    if (
+      sendInteractionModeEnabled &&
+      standaloneSlashCommand !== null &&
+      multipleModelSelections === null
+    ) {
       handleInteractionModeChange(standaloneSlashCommand);
       promptRef.current = "";
       clearComposerDraftContent(composerDraftTarget);
@@ -8769,6 +8787,8 @@ export default function ChatView(props: ChatViewProps) {
             />
 
             <ThreadTodoPanel
+              threadId={activeThread.id}
+              planId={activePlan?.id ?? null}
               steps={activePlan?.steps ?? NO_TODO_STEPS}
               statusInput={{
                 runStatus: activeRuntime?.status ?? null,

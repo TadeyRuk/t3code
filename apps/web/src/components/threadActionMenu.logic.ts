@@ -2,6 +2,7 @@ import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
 export type ThreadActionMenuId =
+  | "clear-session"
   | "new-thread-on-branch"
   | "filter-by-project"
   | "project-settings"
@@ -105,6 +106,12 @@ export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
+    {
+      id: "clear-session",
+      label: "Clear session (keep in history)",
+      icon: "message-square-plus",
+      separatorBefore: true,
+    },
     ...(state.branch
       ? [
           {
