@@ -153,6 +153,10 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
   readonly label: string | null;
   readonly rows: ReadonlyArray<Row>;
   readonly expanded: boolean;
+  /** Overrides the row count, for agents that run without a thread row of their own. */
+  readonly count?: number;
+  /** Keeps the count beside the label while expanded, and the header when there are no rows. */
+  readonly persistent?: boolean;
   readonly children: (rows: ReadonlyArray<Row>) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(props.expanded);
@@ -162,7 +166,21 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
     const status = lineageRowStatus(row);
     return status === "failed" || status === "error";
   }).length;
-  if (props.rows.length === 0) return null;
+  const count = props.count ?? props.rows.length;
+  if (props.rows.length === 0) {
+    if (!props.persistent || !props.label) return null;
+    return (
+      <div
+        className="flex h-8 w-full items-center gap-2 ps-2 pe-2.5 text-xs font-medium text-muted-foreground"
+        aria-label={`${props.label}: ${count}`}
+      >
+        <span className="shrink-0 tabular-nums">
+          {props.label} ({count})
+        </span>
+        <span aria-hidden className="h-px min-w-2 flex-1 bg-border/60" />
+      </div>
+    );
+  }
   return (
     <div>
       {props.label ? (
@@ -172,11 +190,11 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
             {props.label}
           </span>
           {failedCount > 0 ? <SectionHeaderStatus>{failedCount} failed</SectionHeaderStatus> : null}
-          {expanded ? null : (
+          {props.persistent || !expanded ? (
             <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
-              {props.rows.length}
+              {count}
             </span>
-          )}
+          ) : null}
           <ChevronDownIcon
             aria-hidden
             className={cn(
@@ -592,9 +610,27 @@ export function ThreadRelationshipsPanel(props: {
     label: string | null;
     rows: ReadonlyArray<LineageRow>;
     expanded: boolean;
+    count?: number;
+    persistent?: boolean;
   }> = [
     { id: "related", label: null, rows: related, expanded: true },
-    { id: "active", label: null, rows: [...active, ...remoteActive], expanded: true },
+    // "Active" means still holding a live provider process, so a waiting agent counts too.
+    {
+      id: "active",
+      label: "Active agents",
+      rows: [...active, ...remoteActive],
+      expanded: true,
+      count:
+        active.length +
+        remoteActive.length +
+        (projection?.subagents.filter(
+          (agent) =>
+            agent.childThreadId === null &&
+            agent.remoteChild === undefined &&
+            isOrchestrationV2WorkActive(agent.status),
+        ).length ?? 0),
+      persistent: true,
+    },
     {
       id: "previous",
       label: "Previous agents",
