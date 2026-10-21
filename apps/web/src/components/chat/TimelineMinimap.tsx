@@ -52,6 +52,8 @@ export function TimelineMinimap({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const wheelTargetRef = (node: HTMLDivElement | null) => {
     if (!node) return;
+    // Native and non-passive: the forwarder calls preventDefault, which React's passive onWheel
+    // would ignore.
     node.addEventListener("wheel", onWheel, { passive: false });
     return () => node.removeEventListener("wheel", onWheel);
   };
@@ -134,6 +136,8 @@ export function TimelineMinimap({
             });
           }}
           onMouseMove={(event) => {
+            // A drag that began elsewhere (a text selection) must not be captured when it crosses the
+            // rail, so the rail goes inert until the buttons are released.
             if (event.buttons === 0 || pressedOnStripRef.current || passThrough) return;
             setPassThrough(true);
             onMouseButtonsReleased(() => setPassThrough(false));

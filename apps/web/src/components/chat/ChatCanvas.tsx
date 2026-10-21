@@ -26,6 +26,7 @@ export function ChatCanvas({
 }) {
   const elementRef = useRef<HTMLDivElement | null>(null);
   const widthProbeRef = useRef<HTMLDivElement | null>(null);
+  // State rather than a ref so the measuring effect re-runs once the timeline actually mounts.
   const [timelineElement, registerTimeline] = useState<HTMLElement | null>(null);
   const measurements = useStore(store, (state) => state.measurements);
   const detailsCardMeasurement = useStore(store, (state) => state.detailsCardMeasurement);
@@ -62,6 +63,8 @@ export function ChatCanvas({
         contentLeft: composerHost
           ? composerHost.getBoundingClientRect().left - canvasBounds.left
           : 0,
+        // Half the scrollbar width: index.css takes it off the lane padding on each side, so the
+        // column keeps its width when a classic scrollbar claims space.
         timelineGutter: timelineElement
           ? (timelineElement.offsetWidth - timelineElement.clientWidth) / 2
           : 0,
@@ -117,6 +120,8 @@ export function ChatCanvas({
           } as CSSProperties
         }
       >
+        {/* Never shown: it lets getComputedStyle resolve the lane's padding and width bounds, which
+            come from CSS variables and breakpoints that are not available to JS directly. */}
         <div
           ref={widthProbeRef}
           aria-hidden
