@@ -12,6 +12,7 @@ export const ChatCanvasContext = createContext<{
   registerTimeline: (element: HTMLElement | null) => void;
   reportDetailsCard: (card: PreviewMiniPlayerObstacles["detailsCard"]) => void;
   detailsCardTopInset: number;
+  detailsCardBottom: number | null;
 } | null>(null);
 
 export const useChatCanvas = () => useContext(ChatCanvasContext);

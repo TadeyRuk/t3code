@@ -118,6 +118,7 @@ export function ChatCanvas({
     registerTimeline,
     reportDetailsCard,
     detailsCardTopInset: findBar?.bottom ?? 0,
+    detailsCardBottom: detailsCard?.bottom ?? null,
   };
   const { layout } = context;
   return (
