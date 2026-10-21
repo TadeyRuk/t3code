@@ -19,6 +19,8 @@ export interface ChatCanvasMeasurements {
   readonly minChatWidth: number;
   readonly composerHeight: number;
   readonly timelineGutter: number;
+  /** Where the visible chat column starts; narrower than the lane under the chat-width setting. */
+  readonly contentLeft: number;
   /** The find bar's box in canvas coordinates while it is shown. */
   readonly findBar: CanvasEdges | null;
 }
@@ -38,6 +40,7 @@ const INITIAL_MEASUREMENTS: ChatCanvasMeasurements = {
   minChatWidth: 640,
   composerHeight: 0,
   timelineGutter: 0,
+  contentLeft: 0,
   findBar: null,
 };
 
@@ -53,6 +56,7 @@ const sameMeasurements = (a: ChatCanvasMeasurements, b: ChatCanvasMeasurements) 
   a.minChatWidth === b.minChatWidth &&
   a.composerHeight === b.composerHeight &&
   a.timelineGutter === b.timelineGutter &&
+  a.contentLeft === b.contentLeft &&
   sameEdges(a.findBar, b.findBar);
 
 /**
