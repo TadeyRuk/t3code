@@ -301,6 +301,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { ThreadUsageCard } from "./chat/ThreadUsageCard";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   resolveEffectiveEnvMode,
@@ -3939,6 +3940,24 @@ export default function ChatView(props: ChatViewProps) {
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
                   }}
+                />
+
+                <ThreadUsageCard
+                  threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
+                  contextWindow={activeContextWindow}
+                  providerInstanceId={activeProviderInstanceId}
+                  providers={providerStatuses}
+                  sources={serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES}
+                  compactAction={
+                    manualCompactionProviderAvailable
+                      ? {
+                          label: "Compact context",
+                          onActivate: onComposerCompactContextStable,
+                          disabled: compactDisabled,
+                          disabledReason: compactDisabledReason,
+                        }
+                      : undefined
+                  }
                 />
 
                 <PullRequestThreadDialogHost
