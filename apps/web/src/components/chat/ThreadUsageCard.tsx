@@ -43,6 +43,8 @@ const trackStyle: CSSProperties = {
   WebkitMask: ringMask,
 };
 
+// Both composite keywords are needed: the standard `mask-composite: intersect` and WebKit's
+// `source-in` are the same operation under different names, and each engine honours only its own.
 const arcMask = `${ringMask}, conic-gradient(#000 calc(var(--usage-dial-progress) * 1%), transparent 0)`;
 const arcStyle: CSSProperties = {
   background: `conic-gradient(var(--color-success) 0%, var(--color-success) ${SAFE_UNTIL}%, var(--color-warning) ${WARN_AT}%, var(--color-error) ${DANGER_AT}%, var(--color-error) 100%)`,
@@ -118,6 +120,7 @@ function Dial({
       {usedPercent === null ? null : (
         <>
           <span aria-hidden="true" className="absolute inset-0 rounded-full" style={arcStyle} />
+          {/* The conic mask has a square start edge; this cap rounds it so the arc reads as a pill. */}
           <DialCap percent={0} color="var(--color-success)" />
           <DialCap percent={clamped} color={tipColor(clamped)} />
         </>
@@ -207,10 +210,10 @@ function Dial({
           {ring}
         </div>
       )}
-      <span className="max-w-full truncate text-xs leading-none font-medium tracking-[-0.01em] text-foreground">
+      <span className="max-w-full truncate text-[13px] leading-none font-medium text-foreground/80">
         {label}
       </span>
-      <span className="-mt-0.5 max-w-full truncate text-[10.5px] leading-none text-muted-foreground tabular-nums">
+      <span className="-mt-0.5 max-w-full truncate text-xs leading-none font-medium text-muted-foreground tabular-nums">
         {detail}
       </span>
     </div>
@@ -287,6 +290,8 @@ export function ThreadUsageCard({
   const containerWidth = canvas?.container.width;
   const containerHeight = canvas?.container.height;
   useLayoutEffect(() => {
+    // Found by data attribute because the composer is owned by ChatView; if either selector stops
+    // matching, the card silently falls back to the default gap instead of lining up.
     const canvasElement = element?.closest<HTMLElement>("[data-chat-canvas]");
     const host = canvasElement?.querySelector<HTMLElement>('[data-slot="composer-host"]');
     if (!canvasElement || !host) {
@@ -353,13 +358,13 @@ export function ThreadUsageCard({
       data-thread-usage-card
     >
       <div className="dropdown-glass isolate contain-paint flex flex-1 flex-col justify-center overflow-hidden rounded-3xl">
-        <div className="flex items-center justify-between gap-3 px-4 pt-3.5">
-          <h3 className="text-[11px] font-medium tracking-[0.02em] text-muted-foreground select-none">
-            Usage
-          </h3>
+        {/* Type and spacing follow the thread details card beside it: 2xs muted section title,
+            xs medium meta, 13px medium labels. */}
+        <div className="flex min-h-8 items-center justify-between gap-2 px-3.5 pt-2">
+          <h3 className="text-2xs font-medium text-muted-foreground select-none">Usage</h3>
           {provider && providerLabel ? (
             <span
-              className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground"
+              className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground"
               title={plan ? `${providerLabel} · ${plan}` : providerLabel}
             >
               <span className={cn("inline-flex", brandColor.className)} style={brandColor.style}>
@@ -367,7 +372,7 @@ export function ThreadUsageCard({
                   driverKind={provider.driver}
                   displayName={providerLabel}
                   acpRegistryIconUrl={provider.iconUrl}
-                  iconClassName="size-3.5"
+                  iconClassName="size-4"
                 />
               </span>
               <span className="sr-only">{providerLabel}</span>
@@ -375,7 +380,7 @@ export function ThreadUsageCard({
             </span>
           ) : null}
         </div>
-        <div className="grid grid-cols-3 gap-y-4 px-2.5 pt-3.5 pb-4">
+        <div className="grid grid-cols-3 gap-y-4 px-2 pt-2 pb-3.5">
           <Dial label="Context" {...contextDial(contextWindow)} action={compactAction} />
           {windows.map((window) => (
             <Dial
@@ -387,9 +392,7 @@ export function ThreadUsageCard({
           ))}
         </div>
         {notice ? (
-          <p className="-mt-1 px-4 pb-3.5 text-center text-[10.5px] text-muted-foreground">
-            {notice}
-          </p>
+          <p className="-mt-1 px-3.5 pb-3 text-center text-xs text-muted-foreground">{notice}</p>
         ) : null}
       </div>
     </aside>
