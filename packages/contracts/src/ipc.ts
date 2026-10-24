@@ -1132,6 +1132,12 @@ export interface DesktopBridge {
   onSnapShotEvent?: (listener: (event: DesktopSnapShotEvent) => void) => () => void;
   onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
+  /**
+   * Holds an OS display-sleep assertion so the computer stays awake. Older
+   * desktop shells omit these methods.
+   */
+  getKeepAwake?: () => boolean;
+  setKeepAwake?: (enabled: boolean) => Promise<boolean>;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
   /** App window zoom; older desktop shells omit this method. */
   getWindowZoomFactor?: () => number;

@@ -253,6 +253,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   getWindowFullscreenState: () =>
     ipcRenderer.sendSync(IpcChannels.GET_WINDOW_FULLSCREEN_STATE_CHANNEL) === true,
+  getKeepAwake: () => ipcRenderer.sendSync(IpcChannels.GET_KEEP_AWAKE_CHANNEL) === true,
+  setKeepAwake: (enabled) => ipcRenderer.invoke(IpcChannels.SET_KEEP_AWAKE_CHANNEL, enabled),
   getWindowZoomFactor: () => webFrame.getZoomFactor(),
   onWindowFullscreenStateChange: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, fullscreen: unknown) => {
