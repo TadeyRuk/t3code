@@ -1,7 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
+import { CoffeeIcon } from "lucide-react";
 import {
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -17,7 +19,11 @@ import {
   threadUndoClaimsShortcut,
   undoLatestThreadAction,
 } from "../hooks/showThreadUndoNotice";
-import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
+import {
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  useLocalStorage,
+} from "../hooks/useLocalStorage";
 import {
   isRichTextBoldShortcut,
   resolveShortcutCommand,
@@ -61,6 +67,7 @@ import {
   useSidebar,
   useSidebarVisibility,
 } from "./ui/sidebar";
+import { Toggle } from "./ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { registerCommands, registerMenuAction } from "../shortcuts/dispatcher";
@@ -313,6 +320,54 @@ function registerAppShellCommands(router: AnyRouter, shellElement: Element): () 
   };
 }
 
+const KEEP_AWAKE_STORAGE_KEY = "t3code:keep-awake";
+
+function KeepAwakeToggle() {
+  const setKeepAwake = window.desktopBridge?.setKeepAwake;
+  const [enabled, setEnabled] = useLocalStorage(KEEP_AWAKE_STORAGE_KEY, false, Schema.Boolean);
+  const setEnabledRef = useRef(setEnabled);
+  setEnabledRef.current = setEnabled;
+
+  useEffect(() => {
+    if (!setKeepAwake) return;
+    let cancelled = false;
+    void setKeepAwake(enabled).then(
+      (active) => {
+        if (!cancelled && active !== enabled) setEnabledRef.current(active);
+      },
+      () => {
+        if (!cancelled && enabled) setEnabledRef.current(false);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, setKeepAwake]);
+
+  if (!setKeepAwake) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="pointer-events-auto flex shrink-0" />}>
+        <Toggle
+          className="size-[var(--workspace-titlebar-control-size)]! [-webkit-app-region:no-drag]"
+          pressed={enabled}
+          onPressedChange={setEnabled}
+          aria-label="Keep this computer awake"
+          data-keep-awake-toggle=""
+          variant="ghost"
+          size="sm"
+        >
+          <CoffeeIcon className="size-4" />
+        </Toggle>
+      </TooltipTrigger>
+      <TooltipPopup side="bottom">
+        {enabled ? "This computer stays awake" : "Keep this computer awake"}
+      </TooltipPopup>
+    </Tooltip>
+  );
+}
+
 function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
   const router = useRouter();
   const usagePageOpen = useLocation({ select: (location) => location.pathname === "/usage" });
@@ -379,7 +434,7 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
     <div
       ref={appShellCommandsRef}
       className={cn(
-        "pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center",
+        "pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center gap-[var(--workspace-titlebar-control-gap)]",
         mobileSidebarSheetMounted && "hidden",
       )}
       data-sidebar-control=""
@@ -403,6 +458,7 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
           </TooltipPopup>
         </Tooltip>
       ) : null}
+      <KeepAwakeToggle />
     </div>
   );
 }
