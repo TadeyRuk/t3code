@@ -60,6 +60,7 @@ import {
   type SpawnedProcess as ClaudeSpawnedProcess,
   type SDKAssistantMessage,
   type SDKAPIRetryMessage,
+  type SDKControlGetUsageResponse,
   type SDKMessage,
   type SDKRateLimitInfo,
   type SDKResultMessage,
@@ -142,8 +143,8 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
@@ -208,6 +209,8 @@ import {
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import {
   claudeRateLimitEventToUpdate,
+  claudeUsageRefreshWaitMs,
+  claudeUsageResponseToLimits,
   type ClaudeScopedLimitNames,
 } from "../../provider/claudeUsageLimits.ts";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
@@ -355,6 +358,7 @@ const CLAUDE_BOOT_TIMEOUT = "5 minutes";
 // Claude can consume a subagent result before the launching turn ends, leaving
 // its notification with no native wake turn to answer the continuation.
 const CLAUDE_WAKE_TURN_START_DEADLINE = "2 minutes";
+const CLAUDE_USAGE_REFRESH_TIMEOUT = "10 seconds";
 // Claude Code flushes transcript writes every 100 ms, so a workflow member's
 // reply can land after the progress frame that settles it. Its transcript
 // stays the source of its answer this long after it settles.
@@ -674,6 +678,14 @@ export interface ClaudeAgentSdkQuerySession {
     ClaudeAgentSdkQueryRunnerError
   >;
   readonly interrupt: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
+  /**
+   * Plan rate limits read over the live process, so no second CLI is spawned.
+   * Absent on runners that cannot ask.
+   */
+  readonly usage?: Effect.Effect<
+    Pick<SDKControlGetUsageResponse, "rate_limits_available" | "rate_limits">,
+    ClaudeAgentSdkQueryRunnerError
+  >;
   readonly close: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
 }
 
@@ -1701,6 +1713,14 @@ export const layerQueryRunner: Layer.Layer<
               Effect.map(({ state }) => state.rules),
               Effect.mapError((cause) => queryRunnerError(cause, "listPermissionRules")),
             ),
+            usage: Effect.tryPromise({
+              // Only the rate limits are read; skipping `behaviors` avoids a scan of local transcripts.
+              try: () =>
+                queryRuntime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({
+                  skipBehaviors: true,
+                }),
+              catch: (cause) => queryRunnerError(cause, "usage"),
+            }),
             interrupt: Effect.tryPromise({
               try: () => queryRuntime.interrupt(),
               catch: (cause) => queryRunnerError(cause, "interrupt"),
@@ -5579,6 +5599,76 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         // Wake buffers replay result frames, so ledger growth is measured once on arrival.
         const resultLedgerUsage = new WeakMap<SDKMessage, ClaudeLedgerUsage>();
         const resultsReportingNewContextWindow = new WeakSet<SDKMessage>();
+        // Live plan limits: read over the running process around each prompt and reply, so
+        // the meters follow the conversation. Reads are single-flight and spaced out; a
+        // request that lands meanwhile is answered by one trailing read of the newest query.
+        const usageRefresh = yield* Ref.make<{
+          readonly inFlight: boolean;
+          readonly pending: boolean;
+          readonly lastAtMs: number;
+          readonly query: ClaudeAgentSdkQuerySession | null;
+        }>({ inFlight: false, pending: false, lastAtMs: Number.NEGATIVE_INFINITY, query: null });
+        // A failure or an unavailable answer leaves the last good figures on screen.
+        const readClaudeUsageLimits = Effect.fnUntraced(function* (
+          query: ClaudeAgentSdkQuerySession,
+        ) {
+          const publish = adapterOptions.onUsageLimits;
+          if (publish === undefined || query.usage === undefined) return;
+          const response = yield* query.usage.pipe(Effect.timeout(CLAUDE_USAGE_REFRESH_TIMEOUT));
+          const checkedAt = DateTime.formatIso(yield* DateTime.now);
+          const { limits, names } = claudeUsageResponseToLimits({ response, checkedAt });
+          if (limits.unavailable !== undefined || limits.windows.length === 0) return;
+          if (adapterOptions.scopedLimitNames) {
+            yield* Ref.set(adapterOptions.scopedLimitNames, names);
+          }
+          yield* publish({ windows: limits.windows, checkedAt });
+        });
+        // Returns at once: the read runs off the caller's path and must never delay or fail it.
+        const requestUsageRefresh = Effect.fnUntraced(function* (
+          query: ClaudeAgentSdkQuerySession,
+        ) {
+          if (adapterOptions.onUsageLimits === undefined || query.usage === undefined) return;
+          const claimed = yield* Ref.modify(usageRefresh, (state) =>
+            state.inFlight
+              ? ([false, { ...state, pending: true, query }] as const)
+              : ([true, { ...state, inFlight: true, query }] as const),
+          );
+          if (!claimed) return;
+          yield* Effect.gen(function* () {
+            let again = true;
+            while (again) {
+              const before = yield* Ref.get(usageRefresh);
+              const waitMs = claudeUsageRefreshWaitMs(
+                before.lastAtMs,
+                DateTime.toEpochMillis(yield* DateTime.now),
+              );
+              if (waitMs > 0) yield* Effect.sleep(Duration.millis(waitMs));
+              const startedAtMs = DateTime.toEpochMillis(yield* DateTime.now);
+              const current = yield* Ref.updateAndGet(usageRefresh, (state) => ({
+                ...state,
+                pending: false,
+                lastAtMs: startedAtMs,
+              }));
+              if (current.query !== null) {
+                yield* readClaudeUsageLimits(current.query).pipe(
+                  Effect.catch((error) =>
+                    Effect.logDebug("claude usage limits refresh failed", { error }),
+                  ),
+                );
+              }
+              again = yield* Ref.modify(usageRefresh, (state) =>
+                state.pending
+                  ? ([true, state] as const)
+                  : ([false, { ...state, inFlight: false }] as const),
+              );
+            }
+          }).pipe(
+            Effect.onError(() =>
+              Ref.update(usageRefresh, (state) => ({ ...state, inFlight: false })),
+            ),
+            Effect.forkIn(sessionScope),
+          );
+        });
         // A worktree handoff changes the project settings even within one session.
         let bypassCache: { cwd: string | null; availability: ClaudeBypassAvailability } | null =
           null;
@@ -9867,6 +9957,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }
             return;
           }
+          if (
+            input.replayed !== true &&
+            (message.type === "assistant" || message.type === "result")
+          ) {
+            yield* requestUsageRefresh(input.query);
+          }
           // Track before routing: idle-wake Monitors report tasks before replaying their tool calls.
           yield* trackClaudeMonitorCalls(message);
           yield* trackClaudeScheduledWakeup(liveQuery.nativeThreadId, message);
@@ -12594,6 +12690,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   ),
                 ),
               );
+              yield* requestUsageRefresh(querySession.query);
               return;
             }
             // Transcript reads suspend replay; hold SDK frames until the buffer is applied to preserve order.
@@ -12996,6 +13093,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   : Effect.void,
               ),
             );
+            yield* requestUsageRefresh(existing.query);
           },
           (effect, turnInput) =>
             effect.pipe(
