@@ -69,6 +69,7 @@ import {
   ProjectListEntriesError,
   ProjectReadFileError,
   ProjectSearchContentsError,
+  PortsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ProjectMutationError,
@@ -246,6 +247,7 @@ import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { isTelemetryIdHash } from "@t3tools/shared/telemetryId";
 import {
@@ -253,6 +255,7 @@ import {
   withUsageLimitsCommands,
 } from "@t3tools/shared/usageLimits";
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
+import { killListeningPort, listListeningPorts } from "./ports/listeningPorts.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 
@@ -1254,6 +1257,7 @@ export const layerWsRpc = (
         yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
       const projectEnrichment = yield* ProjectEnrichmentService.ProjectEnrichmentService;
       const agentSessionScanner = yield* AgentSessionScanner.AgentSessionScanner;
+      const platform = yield* HostProcess.Platform;
       const agentSessionImporter = yield* AgentSessionImporter.AgentSessionImporter;
       const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
       const keybindings = yield* Keybindings.Keybindings;
@@ -2710,6 +2714,16 @@ export const layerWsRpc = (
         [WS_METHODS.attachmentsCreateUploadUrl]: (input) => issueAttachmentUploadUrl(input),
         [WS_METHODS.attachmentsDelete]: (input) => deletePendingAttachment(input.attachmentId),
         [WS_METHODS.agentSessionsScan]: () => agentSessionScanner.scan,
+        [WS_METHODS.portsList]: () =>
+          Effect.tryPromise({
+            try: () => listListeningPorts(platform),
+            catch: (cause) => new PortsError({ operation: "list", cause }),
+          }).pipe(Effect.map((ports) => ({ ports }))),
+        [WS_METHODS.portsKill]: (input) =>
+          Effect.tryPromise({
+            try: () => killListeningPort(platform, input.port, input.pid),
+            catch: (cause) => new PortsError({ operation: "kill", cause }),
+          }).pipe(Effect.map((stopped) => ({ stopped }))),
         [WS_METHODS.agentSessionsImport]: (input) =>
           agentSessionImporter.importRecentAgentThreads(input),
         [WS_METHODS.assetsCreateUrl]:
