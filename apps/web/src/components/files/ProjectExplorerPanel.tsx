@@ -5,6 +5,7 @@ import { RightPanelResizeHandle } from "~/components/preview/RightPanelResizeHan
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "~/hooks/useResizableWidth";
 
 import FileBrowserPanel from "./FileBrowserPanel";
+import { ListeningPortsSection } from "./ListeningPortsSection";
 
 interface ProjectExplorerPanelProps {
   readonly environmentId: EnvironmentId;
@@ -50,6 +51,7 @@ export function ProjectExplorerPanel(props: ProjectExplorerPanelProps) {
         onOpenFile={props.onOpenFile}
         workspaceMutationId={props.workspaceMutationId}
       />
+      <ListeningPortsSection environmentId={props.environmentId} />
     </aside>
   );
 }
