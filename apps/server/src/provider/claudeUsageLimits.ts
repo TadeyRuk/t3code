@@ -236,3 +236,16 @@ export const recordClaudeUsageResponse = (
   const { limits, names } = claudeUsageResponseToLimits(input);
   return Ref.set(namesRef, names).pipe(Effect.as(limits));
 };
+
+/**
+ * The streamed `rate_limit_event` carries utilization only near a threshold, so the
+ * meters are also re-read over the live process around each prompt and reply. Reads
+ * are spaced by this much, however fast the frames arrive; a request inside the gap
+ * waits out the rest of it and is then served by one trailing read.
+ */
+export const CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS = 5_000;
+
+/** How long to hold a read that is wanted now, given when the last one started. */
+export function claudeUsageRefreshWaitMs(lastRefreshAtMs: number, nowMs: number): number {
+  return Math.max(0, CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS - (nowMs - lastRefreshAtMs));
+}

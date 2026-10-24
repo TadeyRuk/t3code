@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { claudeRateLimitEventToUpdate, claudeUsageResponseToLimits } from "./claudeUsageLimits.ts";
+import {
+  CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS,
+  claudeRateLimitEventToUpdate,
+  claudeUsageRefreshWaitMs,
+  claudeUsageResponseToLimits,
+} from "./claudeUsageLimits.ts";
 
 const checkedAt = "2026-07-18T10:00:00.000Z";
 const noNames = { overageIncluded: undefined } as const;
@@ -269,5 +274,17 @@ describe("claudeRateLimitEventToUpdate", () => {
         },
       ],
     });
+  });
+});
+
+describe("claudeUsageRefreshWaitMs", () => {
+  it("serves the first read at once and spaces later ones by the minimum interval", () => {
+    expect(claudeUsageRefreshWaitMs(Number.NEGATIVE_INFINITY, 0)).toBe(0);
+    expect(claudeUsageRefreshWaitMs(1_000, 1_000)).toBe(CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS);
+    expect(claudeUsageRefreshWaitMs(1_000, 3_000)).toBe(
+      CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS - 2_000,
+    );
+    expect(claudeUsageRefreshWaitMs(1_000, 1_000 + CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS)).toBe(0);
+    expect(claudeUsageRefreshWaitMs(1_000, 60_000)).toBe(0);
   });
 });

@@ -43,6 +43,7 @@ import {
   type ProviderReplayTranscript,
   type ProviderApprovalDecision,
   ProviderSessionId,
+  type ProviderUsageLimitsUpdate,
   ProviderTurnId,
   RunAttemptId,
   RunId,
@@ -2082,6 +2083,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       toolUseId: string,
     ) => Effect.Effect<boolean, ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError>;
     readonly environment?: NodeJS.ProcessEnv;
+    readonly usage?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["usage"];
+    readonly onUsageLimits?: ClaudeAdapterV2.ClaudeAdapterV2Options["onUsageLimits"];
     readonly subagentLaunchToolUseId?: string;
     readonly nativeSessionId?: string;
     readonly settings?: ClaudeSettings;
@@ -2146,6 +2149,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         path: yield* Path.Path,
         crypto: yield* Crypto.Crypto,
         idAllocator,
+        ...(options?.onUsageLimits ? { onUsageLimits: options.onUsageLimits } : {}),
         continuationRequests: {
           offer: (request) =>
             Effect.sync(() => {
@@ -2200,6 +2204,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     ),
                   backgroundTasks: options?.backgroundTasks ?? (() => Effect.succeed(false)),
                   stopTask: options?.stopTask ?? (() => Effect.void),
+                  ...(options?.usage ? { usage: options.usage } : {}),
                   interrupt: Effect.void,
                   close: Queue.shutdown(processMessages),
                 };
@@ -2225,6 +2230,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   }).pipe(Effect.andThen(() => options?.setPermissionMode?.(mode) ?? Effect.void)),
                 backgroundTasks: options?.backgroundTasks ?? (() => Effect.succeed(false)),
                 stopTask: options?.stopTask ?? (() => Effect.void),
+                ...(options?.usage ? { usage: options.usage } : {}),
                 interrupt: options?.interrupt ?? Effect.void,
                 close: options?.close?.(sdkMessages) ?? Effect.void,
               };
@@ -5924,6 +5930,127 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
     ),
   );
+
+  describe("plan limits after a turn", () => {
+    const runOneTurn = Effect.fnUntraced(function* (harness: {
+      readonly runtime: Effect.Success<typeof makeWakeHarness>["runtime"];
+      readonly providerThread: Effect.Success<typeof makeWakeHarness>["providerThread"];
+      readonly threadId: ThreadId;
+      readonly sdkMessages: Queue.Queue<SDKMessage>;
+      readonly awaitTerminal: (count: number) => Effect.Effect<void>;
+    }) {
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make("attempt-claude-usage-refresh"),
+          text: "Hello.",
+          attachments: [],
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000301", result: "Hi." }),
+      );
+      yield* harness.awaitTerminal(1);
+    });
+
+    it.effect("publishes the plan limits read over the live process when a turn ends", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const published = yield* Queue.unbounded<ProviderUsageLimitsUpdate>();
+          const harness = yield* makeWakeHarnessWithOptions({
+            usage: Effect.succeed({
+              rate_limits_available: true,
+              rate_limits: {
+                five_hour: { utilization: 61, resets_at: "2026-10-22T17:40:00Z" },
+                seven_day: { utilization: 12, resets_at: "2026-10-27T08:00:00Z" },
+              },
+            }),
+            onUsageLimits: (update) => Queue.offer(published, update),
+          });
+          yield* runOneTurn(harness);
+          const update = yield* Queue.take(published);
+          assert.deepEqual(
+            update.windows.map((window) => [window.id, window.usedPercent]),
+            [
+              ["five_hour", 61],
+              ["seven_day", 12],
+            ],
+          );
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+          ),
+        ),
+      ),
+    );
+
+    it.effect("reads the limits as soon as the prompt goes in, before the turn has ended", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const published = yield* Queue.unbounded<ProviderUsageLimitsUpdate>();
+          const harness = yield* makeWakeHarnessWithOptions({
+            usage: Effect.succeed({
+              rate_limits_available: true,
+              rate_limits: { five_hour: { utilization: 33, resets_at: "2026-10-22T17:40:00Z" } },
+            }),
+            onUsageLimits: (update) => Queue.offer(published, update),
+          });
+          yield* harness.runtime.startTurn(
+            makeClaudeTestTurnInput({
+              threadId: harness.threadId,
+              providerThread: harness.providerThread,
+              now: yield* DateTime.now,
+              attemptId: RunAttemptId.make("attempt-claude-usage-prompt"),
+              text: "Hello.",
+              attachments: [],
+            }),
+          );
+          assert.equal((yield* Queue.take(published)).windows[0]?.usedPercent, 33);
+          assert.lengthOf(harness.terminalEvents(), 0);
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+          ),
+        ),
+      ),
+    );
+
+    it.effect(
+      "keeps the last figures and still ends the turn when the read fails or is empty",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const published = yield* Queue.unbounded<ProviderUsageLimitsUpdate>();
+            const read = yield* Deferred.make<void>();
+            const harness = yield* makeWakeHarnessWithOptions({
+              usage: Effect.suspend(() =>
+                Deferred.succeed(read, undefined).pipe(
+                  Effect.andThen(
+                    Effect.fail(
+                      new ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError({
+                        method: "usage",
+                        cause: new Error("offline"),
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+              onUsageLimits: (update) => Queue.offer(published, update),
+            });
+            yield* runOneTurn(harness);
+            yield* Deferred.await(read);
+            assert.isTrue(Option.isNone(yield* Queue.poll(published)));
+          }).pipe(
+            Effect.provide(
+              Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+            ),
+          ),
+        ),
+    );
+  });
 
   it.effect("resolves API retries on resumed assistant activity", () =>
     Effect.scoped(
