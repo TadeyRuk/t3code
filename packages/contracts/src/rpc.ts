@@ -102,6 +102,13 @@ import {
   AgentSessionScanError,
 } from "./agentSessions.ts";
 import {
+  PortsError,
+  PortsKillInput,
+  PortsKillResult,
+  PortsListInput,
+  PortsListResult,
+} from "./ports.ts";
+import {
   AssetAccessError,
   AssetCreateUrlInput,
   AssetCreateUrlResult,
@@ -431,6 +438,8 @@ export const WS_METHODS = {
   filesystemBrowse: "filesystem.browse",
   filesystemGetMetadata: "filesystem.getMetadata",
   agentSessionsScan: "agentSessions.scan",
+  portsList: "ports.list",
+  portsKill: "ports.kill",
   agentSessionsImport: "agentSessions.import",
   assetsCreateUrl: "assets.createUrl",
   assetsPersistChatAttachments: "assets.persistChatAttachments",
@@ -1447,6 +1456,18 @@ const WsAgentSessionsScanRpc = Rpc.make(WS_METHODS.agentSessionsScan, {
   error: Schema.Union([AgentSessionScanError, EnvironmentAuthorizationError]),
 });
 
+const WsPortsListRpc = Rpc.make(WS_METHODS.portsList, {
+  payload: PortsListInput,
+  success: PortsListResult,
+  error: Schema.Union([PortsError, EnvironmentAuthorizationError]),
+});
+
+const WsPortsKillRpc = Rpc.make(WS_METHODS.portsKill, {
+  payload: PortsKillInput,
+  success: PortsKillResult,
+  error: Schema.Union([PortsError, EnvironmentAuthorizationError]),
+});
+
 const WsAgentSessionsImportRpc = Rpc.make(WS_METHODS.agentSessionsImport, {
   payload: AgentSessionImportInput,
   success: AgentSessionImportResult,
@@ -2238,6 +2259,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsFilesystemGetMetadataRpc,
   WsAgentSessionsScanRpc,
   WsAgentSessionsImportRpc,
+  WsPortsListRpc,
+  WsPortsKillRpc,
   WsAssetsCreateUrlRpc,
   WsAssetsPersistChatAttachmentsRpc,
   WsAttachmentsCreateUploadUrlRpc,
