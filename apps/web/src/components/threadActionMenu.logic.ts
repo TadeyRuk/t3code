@@ -118,15 +118,15 @@ export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
+    ...(state.canFind
+      ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
+      : []),
     {
       id: "clear-session",
       label: "Clear session (keep in history)",
       icon: "message-square-plus",
       separatorBefore: true,
     },
-    ...(state.canFind
-      ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
-      : []),
     ...(state.branch
       ? [
           {
