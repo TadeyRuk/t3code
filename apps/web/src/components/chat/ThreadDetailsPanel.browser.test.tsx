@@ -138,6 +138,8 @@ function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
         registerTimeline: noop,
         measureDetailsCard: noop,
         detailsCardTopInset: 0,
+        detailsCardBottom: null,
+        chatContentLeft: 0,
         preferredDetailsCard: placement,
         detailsCardPlacement: placement,
       }}

@@ -27,8 +27,6 @@ export const ChatCanvasContext = createContext<{
   detailsCardBottom: number | null;
   /** Left edge of the visible chat column within the canvas, or 0 before it is measured. */
   chatContentLeft: number;
-  /** Left edge of the visible chat column within the canvas, or 0 before it is measured. */
-  chatContentLeft: number;
 } | null>(null);
 
 export const useChatCanvas = () => useContext(ChatCanvasContext);

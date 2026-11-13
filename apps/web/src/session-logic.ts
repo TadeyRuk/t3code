@@ -1,5 +1,5 @@
 import type { ThreadStructureRuntime } from "@t3tools/client-runtime/state/shell";
-import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import { resolveThreadWorkingStartedAt, type ThreadStructure } from "@t3tools/client-runtime/state/models";
 import {
   type AssetResource,
   type OrchestrationV2Checkpoint,
@@ -1140,7 +1140,7 @@ export function deriveCanInterruptRunningThread(
 export type { TurnDiffSummary };
 
 export function deriveActivePlanState(
-  projection: OrchestrationV2ThreadProjection | null,
+  projection: ThreadStructure | null,
   latestRunId: RunId | undefined,
 ): ActivePlanState | null {
   if (projection === null) return null;
@@ -1176,7 +1176,7 @@ export function deriveActivePlanState(
 
 // Claude's unfinished tasks belong to the provider session, not just the turn.
 export function selectComposerTasksPlan(
-  projection: OrchestrationV2ThreadProjection | null,
+  projection: ThreadStructure | null,
   plan: ActivePlanState | null,
   activeRunId: RunId | null,
   activeRunSettled: boolean,
@@ -1205,11 +1205,11 @@ export function selectComposerTasksPlan(
   return latestStartedRun?.providerThreadId === planProviderThreadId ? plan : null;
 }
 
-function planItemTime(projection: OrchestrationV2ThreadProjection, planId: PlanId): string {
+function planItemTime(projection: ThreadStructure, planId: PlanId): string {
   const item = projection.turnItems.findLast(
     (candidate) =>
       (candidate.type === "proposed_plan" || candidate.type === "todo_list") &&
       candidate.planId === planId,
   );
-  return DateTime.formatIso(item?.updatedAt ?? projection.updatedAt);
+  return DateTime.formatIso(item !== undefined && "updatedAt" in item ? item.updatedAt : projection.thread.createdAt);
 }

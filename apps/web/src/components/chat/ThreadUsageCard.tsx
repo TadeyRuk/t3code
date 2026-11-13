@@ -14,7 +14,8 @@ import {
 import { FoldVerticalIcon } from "lucide-react";
 import { type CSSProperties, useLayoutEffect, useMemo, useState } from "react";
 
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { observeResize } from "../../lib/observeResize";
 import { cn } from "../../lib/utils";
 import { selectThreadPanelOpen, useRightPanelStore } from "../../rightPanelStore";
@@ -97,7 +98,7 @@ export interface DialAction {
   readonly label: string;
   readonly onActivate: () => void;
   readonly disabled: boolean;
-  readonly disabledReason: string | null;
+  readonly disabledReason?: string | null;
 }
 
 /** Every dial fills toward its limit, so "fuller" means the same thing across the row. */

@@ -12,7 +12,10 @@ import {
 } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 
-import type { PlanId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, PlanId, ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import * as DateTime from "effect/DateTime";
+import { useThreadUpdatedAt } from "../../state/entities";
 import type { ActivePlanState } from "../../session-logic";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -263,27 +266,41 @@ function StepNode({
  * needs no layout pass of its own and steps aside when that lane is too narrow.
  */
 export function ThreadTodoPanel({
+  environmentId,
   threadId,
   planId,
   steps,
   statusInput,
 }: {
+  readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly planId: PlanId | null;
   readonly steps: ActivePlanState["steps"];
-  readonly statusInput: Omit<TodoPanelStatusInput, "nowMs" | "allStepsDone" | "unfinishedCount">;
+  readonly statusInput: Omit<
+    TodoPanelStatusInput,
+    "nowMs" | "allStepsDone" | "unfinishedCount" | "lastActivityAtMs"
+  >;
 }) {
+  // Read here, not in ChatView: it moves with every streamed chunk and would re-render the chat.
+  const threadUpdatedAt = useThreadUpdatedAt(scopeThreadRef(environmentId, threadId));
+  const lastActivityAtMs = threadUpdatedAt === null ? null : DateTime.toEpochMillis(threadUpdatedAt);
   const canvas = useChatCanvas();
   const [dismissedPlanId, setDismissedPlanId] = useState(() => readDismissedPlanId(threadId));
   const allStepsDone = steps.length > 0 && steps.every((step) => step.status === "completed");
   const runActive = statusInput.runStatus === "running";
-  const nowMs = useQuietClock(statusInput.lastActivityAtMs, runActive);
+  const nowMs = useQuietClock(lastActivityAtMs, runActive);
 
   useEffect(() => {
     setDismissedPlanId(readDismissedPlanId(threadId));
   }, [threadId]);
   const unfinishedCount = steps.filter((step) => step.status !== "completed").length;
-  const status = deriveTodoPanelStatus({ ...statusInput, nowMs, allStepsDone, unfinishedCount });
+  const status = deriveTodoPanelStatus({
+    ...statusInput,
+    lastActivityAtMs,
+    nowMs,
+    allStepsDone,
+    unfinishedCount,
+  });
 
   const activeIndex = steps.findIndex((step) => step.status === "inProgress");
   const activeRowRef = useRef<HTMLLIElement | null>(null);

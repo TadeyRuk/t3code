@@ -68,6 +68,8 @@ function Card({
           registerTimeline: () => {},
           measureDetailsCard: () => {},
           detailsCardTopInset: 0,
+          detailsCardBottom: null,
+          chatContentLeft: 0,
           preferredDetailsCard: placement,
           detailsCardPlacement: inline ? placement : null,
         }}
