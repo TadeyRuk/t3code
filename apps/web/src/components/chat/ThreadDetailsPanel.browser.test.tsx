@@ -140,6 +140,8 @@ function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
         detailsCardTopInset: 0,
         preferredDetailsCard: placement,
         detailsCardPlacement: placement,
+        detailsCardBottom: null,
+        chatContentLeft: 0,
       }}
     >
       <ThreadDetailsPanel

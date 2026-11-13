@@ -70,6 +70,8 @@ function Card({
           detailsCardTopInset: 0,
           preferredDetailsCard: placement,
           detailsCardPlacement: inline ? placement : null,
+          detailsCardBottom: null,
+          chatContentLeft: 0,
         }}
       >
         <ThreadDetailsCard

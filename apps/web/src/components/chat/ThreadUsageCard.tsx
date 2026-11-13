@@ -12,9 +12,11 @@ import {
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
 import { FoldVerticalIcon } from "lucide-react";
-import { type CSSProperties, useLayoutEffect, useMemo, useState } from "react";
+import { type CSSProperties, useLayoutEffect, useState } from "react";
 
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import { formatContextWindowTokens } from "~/lib/contextWindow";
+import { useNowMinute } from "../../hooks/useNowMinute";
 import { observeResize } from "../../lib/observeResize";
 import { cn } from "../../lib/utils";
 import { selectThreadPanelOpen, useRightPanelStore } from "../../rightPanelStore";
@@ -70,7 +72,7 @@ function tipColor(percent: number): string {
 
 // Critically damped: nothing here is flicked, so a settle with no overshoot reads as calm.
 const SETTLE =
-  "transition-[--usage-dial-progress,transform,background-color] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none";
+  "transition-[--usage-dial-progress,transform,background-color] duration-700 ease-out motion-reduce:transition-none";
 
 function formatPercentNumber(value: number): string {
   return value < 10 ? value.toFixed(1).replace(/\.0$/, "") : `${Math.round(value)}`;
@@ -137,10 +139,10 @@ function Dial({
           <span className="text-sm text-muted-foreground">–</span>
         ) : (
           <>
-            <span className="text-sm leading-none font-semibold tracking-[-0.03em]">
+            <span className="text-sm leading-none font-semibold tracking-tight">
               {formatPercentNumber(clamped)}
             </span>
-            <span className="ms-px mt-[3px] text-[9px] leading-none font-medium text-muted-foreground">
+            <span className="ms-px mt-0.75 text-3xs leading-none font-medium text-muted-foreground">
               %
             </span>
           </>
@@ -164,7 +166,7 @@ function Dial({
   } as CSSProperties;
 
   return (
-    <div className="flex min-w-0 flex-col items-center gap-[7px]">
+    <div className="flex min-w-0 flex-col items-center gap-1.75">
       {action ? (
         <Tooltip>
           <TooltipTrigger
@@ -178,7 +180,7 @@ function Dial({
                   if (!action.disabled) action.onActivate();
                 }}
                 className={cn(
-                  "group/dial relative size-14 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
+                  "group/dial relative size-14 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   "transition-transform duration-100 ease-out motion-reduce:transition-none",
                   action.disabled ? "cursor-not-allowed" : "cursor-pointer active:scale-[0.94]",
                 )}
@@ -210,7 +212,7 @@ function Dial({
           {ring}
         </div>
       )}
-      <span className="max-w-full truncate text-[13px] leading-none font-medium text-foreground/80">
+      <span className="max-w-full truncate text-sm leading-none font-medium text-foreground/80">
         {label}
       </span>
       <span className="-mt-0.5 max-w-full truncate text-xs leading-none font-medium text-muted-foreground tabular-nums">
@@ -259,14 +261,12 @@ export function ThreadUsageCard({
   readonly compactAction?: DialAction | undefined;
 }) {
   const canvas = useChatCanvas();
-  // The clock is frozen at each provider refresh: a ticking one would repaint the card every second.
-  const report = useMemo(
-    () =>
-      providerInstanceId === null
-        ? null
-        : collectProviderUsageLimits(providerInstanceId, providers, sources, Date.now()),
-    [providerInstanceId, providers, sources],
-  );
+  // A minute tick is fine enough for "resets in" labels and never repaints the card per second.
+  const nowMs = Date.parse(useNowMinute());
+  const report =
+    providerInstanceId === null
+      ? null
+      : collectProviderUsageLimits(providerInstanceId, providers, sources, nowMs);
   const provider = providers.find((entry) => entry.instanceId === providerInstanceId);
   const brandColor = provider ? providerTextColor(provider.driver) : {};
   const providerLabel = provider
@@ -278,6 +278,7 @@ export function ThreadUsageCard({
   );
   const [element, setElement] = useState<HTMLElement | null>(null);
   const [height, setHeight] = useState(0);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the card's own DOM height so it can step aside when there is no room
   useLayoutEffect(() => {
     if (!element) return;
     const measure = () => setHeight(element.offsetHeight);
@@ -287,17 +288,13 @@ export function ThreadUsageCard({
   // Lines up with the message box beside it. Measured, not derived: the box's height and its
   // inset from the canvas edge both change with banners, attachments and multi-line drafts.
   const [composerBox, setComposerBox] = useState<{ bottom: number; height: number } | null>(null);
-  const containerWidth = canvas?.container.width;
-  const containerHeight = canvas?.container.height;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- observes the composer's DOM box so the card lines up with it
   useLayoutEffect(() => {
     // Found by data attribute because the composer is owned by ChatView; if either selector stops
     // matching, the card silently falls back to the default gap instead of lining up.
     const canvasElement = element?.closest<HTMLElement>("[data-chat-canvas]");
     const host = canvasElement?.querySelector<HTMLElement>('[data-slot="composer-host"]');
-    if (!canvasElement || !host) {
-      setComposerBox(null);
-      return;
-    }
+    if (!canvasElement || !host) return;
     const measure = () => {
       const canvasRect = canvasElement.getBoundingClientRect();
       const hostRect = host.getBoundingClientRect();
@@ -311,7 +308,7 @@ export function ThreadUsageCard({
     };
     measure();
     return observeResize([canvasElement, host], measure);
-  }, [element, containerWidth, containerHeight]);
+  }, [element]);
 
   const placement = canvas
     ? resolveThreadDetailsCardLayout({
@@ -363,21 +360,27 @@ export function ThreadUsageCard({
         <div className="flex min-h-8 items-center justify-between gap-2 px-3.5 pt-2">
           <h3 className="text-2xs font-medium text-muted-foreground select-none">Usage</h3>
           {provider && providerLabel ? (
-            <span
-              className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground"
-              title={plan ? `${providerLabel} · ${plan}` : providerLabel}
-            >
-              <span className={cn("inline-flex", brandColor.className)} style={brandColor.style}>
-                <ProviderInstanceIcon
-                  driverKind={provider.driver}
-                  displayName={providerLabel}
-                  acpRegistryIconUrl={provider.iconUrl}
-                  iconClassName="size-4"
-                />
-              </span>
-              <span className="sr-only">{providerLabel}</span>
-              {plan ? <span className="truncate">{plan}</span> : null}
-            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground" />
+                }
+              >
+                <span className={cn("inline-flex", brandColor.className)} style={brandColor.style}>
+                  <ProviderInstanceIcon
+                    driverKind={provider.driver}
+                    displayName={providerLabel}
+                    acpRegistryIconUrl={provider.iconUrl}
+                    iconClassName="size-4"
+                  />
+                </span>
+                <span className="sr-only">{providerLabel}</span>
+                {plan ? <span className="truncate">{plan}</span> : null}
+              </TooltipTrigger>
+              <TooltipPopup side="bottom">
+                {plan ? `${providerLabel} · ${plan}` : providerLabel}
+              </TooltipPopup>
+            </Tooltip>
           ) : null}
         </div>
         <div className="grid grid-cols-3 gap-y-4 px-2 pt-2 pb-3.5">

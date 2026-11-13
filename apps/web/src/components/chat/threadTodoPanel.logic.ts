@@ -1,10 +1,13 @@
+import type { ThreadStructureTurnItem } from "@t3tools/client-runtime/state/models";
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import type {
-  OrchestrationV2ProjectedTurnItem,
+  OrchestrationV2PlanArtifact,
   OrchestrationV2RunStatus,
   PlanId,
   RunId,
 } from "@t3tools/contracts";
+
+type TodoListPlan = Extract<OrchestrationV2PlanArtifact, { readonly kind: "todo_list" }>;
 
 export interface ActivePlanState {
   readonly id: PlanId;
@@ -23,7 +26,7 @@ export function deriveActivePlanState(
 ): ActivePlanState | null {
   if (projection === null) return null;
   const plans = projection.plans.filter(
-    (plan) => plan.kind === "todo_list" && plan.status !== "superseded",
+    (plan): plan is TodoListPlan => plan.kind === "todo_list" && plan.status !== "superseded",
   );
   const runOrdinals = new Map<RunId | null, number>(
     projection.runs.map((run) => [run.id, run.ordinal]),
@@ -131,7 +134,7 @@ export function deriveTodoPanelStatus(input: TodoPanelStatusInput): TodoPanelSta
 
 /** The provider retry still in flight, if any. Settled retries stay in the log but are not news. */
 export function findRunningProviderRetry(
-  items: ReadonlyArray<OrchestrationV2ProjectedTurnItem> | null | undefined,
+  items: ReadonlyArray<{ readonly item: ThreadStructureTurnItem }> | null | undefined,
 ): { readonly attempt: number; readonly maxAttempts: number | null } | null {
   if (!items) return null;
   for (let index = items.length - 1; index >= 0; index -= 1) {
@@ -149,17 +152,4 @@ export function formatQuietDuration(quietMs: number): string {
   if (minutes < 1) return `${totalSeconds}s`;
   const seconds = totalSeconds % 60;
   return seconds === 0 || minutes >= 10 ? `${minutes}m` : `${minutes}m ${seconds}s`;
-}
-
-/** The newest of the given timestamps (ISO strings or epoch milliseconds), as epoch milliseconds. */
-export function latestActivityMs(
-  ...timestamps: ReadonlyArray<string | number | null | undefined>
-): number | null {
-  let latest: number | null = null;
-  for (const timestamp of timestamps) {
-    if (timestamp === null || timestamp === undefined || timestamp === "") continue;
-    const parsed = typeof timestamp === "number" ? timestamp : Date.parse(timestamp);
-    if (Number.isFinite(parsed) && (latest === null || parsed > latest)) latest = parsed;
-  }
-  return latest;
 }

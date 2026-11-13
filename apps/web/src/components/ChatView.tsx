@@ -56,7 +56,6 @@ import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts } from "./chat/useChatShortcuts";
 import { ChatBannerLane } from "./chat/ChatBannerLane";
-import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import {
   AuthOrchestrationOperateScope,
@@ -304,11 +303,7 @@ import {
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
 import { NO_TODO_STEPS, ThreadTodoPanel } from "./chat/ThreadTodoPanel";
-import {
-  deriveActivePlanState,
-  findRunningProviderRetry,
-  latestActivityMs,
-} from "./chat/threadTodoPanel.logic";
+import { deriveActivePlanState, findRunningProviderRetry } from "./chat/threadTodoPanel.logic";
 import { ThreadUsageCard } from "./chat/ThreadUsageCard";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
@@ -4026,7 +4021,10 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadTodoPanel
-                  threadId={activeThread.id}
+                  threadRef={{
+                    environmentId: activeThread.environmentId,
+                    threadId: activeThread.id,
+                  }}
                   planId={activePlan?.id ?? null}
                   steps={activePlan?.steps ?? NO_TODO_STEPS}
                   statusInput={{
@@ -4044,10 +4042,6 @@ export default function ChatView(props: ChatViewProps) {
                     lastError: activeRuntime?.lastError ?? null,
                     lastErrorIsUsageLimit: activeRuntime?.lastErrorClass === "usage_limit",
                     usageLimitResetAt: activeRuntime?.usageLimitResetAt ?? null,
-                    lastActivityAtMs: latestActivityMs(
-                      activeRuntime?.updatedAt,
-                      serverProjection ? DateTime.toEpochMillis(serverProjection.updatedAt) : null,
-                    ),
                   }}
                 />
 
