@@ -95,7 +95,7 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "V1";
+  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "V2";
 }
 
 export function resolveDesktopAppBranding(input: {

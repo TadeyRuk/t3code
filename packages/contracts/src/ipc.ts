@@ -81,7 +81,7 @@ export type DesktopUpdateStatus =
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopUpdateChannel = "latest" | "nightly";
-export type DesktopAppStageLabel = "Alpha" | "Beta" | "Dev" | "Nightly" | "V1";
+export type DesktopAppStageLabel = "Alpha" | "Beta" | "Dev" | "Nightly" | "V2";
 
 export const DesktopUpdateStatusSchema = Schema.Literals([
   "disabled",
@@ -101,7 +101,7 @@ export const DesktopAppStageLabelSchema = Schema.Literals([
   "Beta",
   "Dev",
   "Nightly",
-  "V1",
+  "V2",
 ]);
 
 export interface DesktopAppBranding {
