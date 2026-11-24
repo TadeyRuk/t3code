@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { claudeRateLimitEventToUpdate, claudeUsageResponseToLimits } from "./claudeUsageLimits.ts";
+import {
+  CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS,
+  claudeRateLimitEventToUpdate,
+  claudeUsageRefreshWaitMs,
+  claudeUsageResponseToLimits,
+} from "./claudeUsageLimits.ts";
 
 const checkedAt = "2026-07-18T10:00:00.000Z";
 const noNames = { overageIncluded: undefined } as const;
@@ -16,8 +21,6 @@ describe("claudeUsageResponseToLimits", () => {
             five_hour: { utilization: 54, resets_at: "2026-07-18T14:39:00Z" },
             seven_day: { utilization: 18.4, resets_at: "2026-07-24T08:59:00+00:00" },
             seven_day_opus: { utilization: 3, resets_at: null },
-            // Newer CLIs add this on top of the typed keys; the pinned SDK
-            // typings do not know it yet.
             ...({
               model_scoped: [
                 { display_name: "Fable", utilization: 73, resets_at: "2026-07-24T08:59:00Z" },
@@ -201,6 +204,22 @@ describe("claudeUsageResponseToLimits", () => {
     ).toEqual([monthlyWindow]);
   });
 
+  it("flags a $0 cap instead of reporting a monthly window", () => {
+    const response = {
+      rate_limits_available: true,
+      rate_limits: {
+        five_hour: null,
+        seven_day: null,
+        extra_usage: { is_enabled: true, used_credits: 0, monthly_limit: 0, utilization: null },
+      },
+    };
+    expect(claudeUsageResponseToLimits({ checkedAt, response }).limits).toEqual({
+      checkedAt,
+      windows: [],
+      zeroSpendCap: true,
+    });
+  });
+
   it("omits disabled budgets and refuses invalid money without an enabled fallback", () => {
     const rateLimits = enterpriseResponse.rate_limits;
     const response = {
@@ -269,5 +288,17 @@ describe("claudeRateLimitEventToUpdate", () => {
         },
       ],
     });
+  });
+});
+
+describe("claudeUsageRefreshWaitMs", () => {
+  it("serves the first read at once and spaces later ones by the minimum interval", () => {
+    expect(claudeUsageRefreshWaitMs(Number.NEGATIVE_INFINITY, 0)).toBe(0);
+    expect(claudeUsageRefreshWaitMs(1_000, 1_000)).toBe(CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS);
+    expect(claudeUsageRefreshWaitMs(1_000, 3_000)).toBe(
+      CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS - 2_000,
+    );
+    expect(claudeUsageRefreshWaitMs(1_000, 1_000 + CLAUDE_USAGE_REFRESH_MIN_INTERVAL_MS)).toBe(0);
+    expect(claudeUsageRefreshWaitMs(1_000, 60_000)).toBe(0);
   });
 });

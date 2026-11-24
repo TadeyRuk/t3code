@@ -1,7 +1,5 @@
-import type {
-  OrchestrationV2ProjectedTurnItem,
-  OrchestrationV2RunStatus,
-} from "@t3tools/contracts";
+import type { OrchestrationV2RunStatus } from "@t3tools/contracts";
+import type { ThreadStructureTurnItem } from "@t3tools/client-runtime/state/models";
 
 /** Silence this long on a running turn reads as stalled, though a long command can look the same. */
 export const TODO_STALL_THRESHOLD_MS = 90_000;
@@ -84,7 +82,7 @@ export function deriveTodoPanelStatus(input: TodoPanelStatusInput): TodoPanelSta
 
 /** The provider retry still in flight, if any. Settled retries stay in the log but are not news. */
 export function findRunningProviderRetry(
-  items: ReadonlyArray<OrchestrationV2ProjectedTurnItem> | null | undefined,
+  items: ReadonlyArray<{ readonly item: ThreadStructureTurnItem }> | null | undefined,
 ): { readonly attempt: number; readonly maxAttempts: number | null } | null {
   if (!items) return null;
   for (let index = items.length - 1; index >= 0; index -= 1) {

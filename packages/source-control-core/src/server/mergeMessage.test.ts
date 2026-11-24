@@ -14,11 +14,26 @@ describe("removeAgentCredits", () => {
           "* Co-authored-by: Codex <noreply@openai.com>",
           "co-authored-by: Cursor <cursoragent@cursor.com>",
           "Co-authored-by: Copilot <copilot@github.com>",
+          "Co-Authored-By:\tGitHub Copilot   <NOREPLY@GITHUB.COM>",
           "",
           "🤖 Generated with [Claude Code](https://claude.ai/code)",
         ].join("\n"),
       ),
     ).toBe("Details about Claude support.\n\n\nCo-authored-by: Alice <alice@example.com>");
+  });
+
+  it("removes the footer Claude Code writes today, which links to claude.com", () => {
+    expect(
+      removeAgentCredits(
+        [
+          "Details",
+          "",
+          "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+          "",
+          "Co-Authored-By: Claude <noreply@anthropic.com>",
+        ].join("\n"),
+      ),
+    ).toBe("Details");
   });
 
   it("preserves unknown identities, humans named after agents, and ordinary prose", () => {

@@ -5,16 +5,14 @@ import type {
   ServerProviderUsageWindow,
   UsageLimitSourceSnapshots,
 } from "@t3tools/contracts";
-import {
-  collectProviderUsageLimits,
-  formatResetsIn,
-  limitsNotice,
-  remainingPercent,
-} from "@t3tools/shared/usageLimits";
+import { collectProviderUsageLimits, remainingPercent } from "@t3tools/shared/usageLimits";
+import { formatResetsIn, limitsNotice } from "@t3tools/shared/usageLimitsCopy";
 import { FoldVerticalIcon } from "lucide-react";
+import { T, useGT } from "gt-react";
 import { type CSSProperties, useLayoutEffect, useMemo, useState } from "react";
 
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { observeResize } from "../../lib/observeResize";
 import { cn } from "../../lib/utils";
 import { selectThreadPanelOpen, useRightPanelStore } from "../../rightPanelStore";
@@ -97,7 +95,7 @@ export interface DialAction {
   readonly label: string;
   readonly onActivate: () => void;
   readonly disabled: boolean;
-  readonly disabledReason: string | null;
+  readonly disabledReason?: string | null;
 }
 
 /** Every dial fills toward its limit, so "fuller" means the same thing across the row. */
@@ -112,6 +110,7 @@ function Dial({
   readonly detail: string;
   readonly action?: DialAction | undefined;
 }) {
+  const gt = useGT();
   const clamped = Math.max(0, Math.min(100, usedPercent ?? 0));
   const valueText = usedPercent === null ? detail : `${Math.round(clamped)}% used, ${detail}`;
   const ring = (
@@ -192,7 +191,7 @@ function Dial({
           </TooltipTrigger>
           <TooltipPopup side="top">
             {action.disabled
-              ? (action.disabledReason ?? `${action.label} is unavailable`)
+              ? (action.disabledReason ?? gt("{label} is unavailable", { label: action.label }))
               : action.label}
           </TooltipPopup>
         </Tooltip>
@@ -258,6 +257,7 @@ export function ThreadUsageCard({
   /** Absent when the provider cannot compact, so the dial stays a plain gauge. */
   readonly compactAction?: DialAction | undefined;
 }) {
+  const gt = useGT();
   const canvas = useChatCanvas();
   // The clock is frozen at each provider refresh: a ticking one would repaint the card every second.
   const report = useMemo(
@@ -344,7 +344,7 @@ export function ThreadUsageCard({
   return (
     <aside
       ref={setElement}
-      aria-label="Usage"
+      aria-label={gt("Usage")}
       className="absolute z-20 flex flex-col"
       // Hidden rather than unmounted so the height stays measurable when room returns.
       style={{
@@ -361,7 +361,9 @@ export function ThreadUsageCard({
         {/* Type and spacing follow the thread details card beside it: 2xs muted section title,
             xs medium meta, 13px medium labels. */}
         <div className="flex min-h-8 items-center justify-between gap-2 px-3.5 pt-2">
-          <h3 className="text-2xs font-medium text-muted-foreground select-none">Usage</h3>
+          <h3 className="text-2xs font-medium text-muted-foreground select-none">
+            <T>Usage</T>
+          </h3>
           {provider && providerLabel ? (
             <span
               className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground"
@@ -381,7 +383,7 @@ export function ThreadUsageCard({
           ) : null}
         </div>
         <div className="grid grid-cols-3 gap-y-4 px-2 pt-2 pb-3.5">
-          <Dial label="Context" {...contextDial(contextWindow)} action={compactAction} />
+          <Dial label={gt("Context")} {...contextDial(contextWindow)} action={compactAction} />
           {windows.map((window) => (
             <Dial
               key={window.id}
