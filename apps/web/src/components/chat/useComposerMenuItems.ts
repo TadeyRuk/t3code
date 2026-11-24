@@ -285,7 +285,7 @@ export function useComposerMenuItems({
           type: "slash-command",
           command: "summon",
           label: "/summon",
-          description: "Start a child agent and open its conversation",
+          description: gt("Start a child agent and open its conversation"),
         },
         ...(freshSessionAvailable
           ? ([

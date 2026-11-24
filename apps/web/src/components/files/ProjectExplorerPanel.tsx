@@ -1,4 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import type { CSSProperties } from "react";
 
 import { RightPanelResizeHandle } from "~/components/preview/RightPanelResizeHandle";
@@ -18,6 +19,7 @@ interface ProjectExplorerPanelProps {
 }
 
 export function ProjectExplorerPanel(props: ProjectExplorerPanelProps) {
+  const gt = useGT();
   const { width, handlers } = useResizableWidth({
     storageKey: "t3code:project-explorer-width",
     defaultWidth: 256,
@@ -35,12 +37,12 @@ export function ProjectExplorerPanel(props: ProjectExplorerPanelProps) {
     <aside
       className="relative flex min-h-0 shrink-0 flex-col border-r border-border/60 bg-background"
       style={style}
-      aria-label="Project Explorer"
+      aria-label={gt("Project Explorer")}
       data-project-explorer
     >
       <RightPanelResizeHandle handlers={handlers} className="-right-1 left-auto" />
       <div className="flex h-9 min-h-9 shrink-0 items-center border-b border-border/60 px-3 text-xs font-medium text-muted-foreground">
-        Explorer
+        <T>Explorer</T>
       </div>
       <FileBrowserPanel
         environmentId={props.environmentId}

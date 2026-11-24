@@ -7,7 +7,6 @@ import {
 import {
   type AssetResource,
   type OrchestrationV2Checkpoint,
-  type OrchestrationV2ThreadProjection,
   type OrchestrationV2ExecutionNode,
   type OrchestrationV2PlanArtifact,
   type OrchestrationV2ProjectedTurnItem,
@@ -1295,5 +1294,7 @@ function planItemTime(projection: ThreadStructure, planId: PlanId): string {
       (candidate.type === "proposed_plan" || candidate.type === "todo_list") &&
       candidate.planId === planId,
   );
-  return DateTime.formatIso(item !== undefined && "updatedAt" in item ? item.updatedAt : projection.thread.createdAt);
+  return DateTime.formatIso(
+    item !== undefined && "updatedAt" in item ? item.updatedAt : projection.thread.createdAt,
+  );
 }

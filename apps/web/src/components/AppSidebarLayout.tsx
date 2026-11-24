@@ -324,6 +324,7 @@ function registerAppShellCommands(router: AnyRouter, shellElement: Element): () 
 const KEEP_AWAKE_STORAGE_KEY = "t3code:keep-awake";
 
 function KeepAwakeToggle() {
+  const gt = useGT();
   const setKeepAwake = window.desktopBridge?.setKeepAwake;
   const [enabled, setEnabled] = useLocalStorage(KEEP_AWAKE_STORAGE_KEY, false, Schema.Boolean);
   const setEnabledRef = useRef(setEnabled);
@@ -354,7 +355,7 @@ function KeepAwakeToggle() {
           className="size-[var(--workspace-titlebar-control-size)]! [-webkit-app-region:no-drag]"
           pressed={enabled}
           onPressedChange={setEnabled}
-          aria-label="Keep this computer awake"
+          aria-label={gt("Keep this computer awake")}
           data-keep-awake-toggle=""
           variant="ghost"
           size="sm"
@@ -363,7 +364,7 @@ function KeepAwakeToggle() {
         </Toggle>
       </TooltipTrigger>
       <TooltipPopup side="bottom">
-        {enabled ? "This computer stays awake" : "Keep this computer awake"}
+        {enabled ? gt("This computer stays awake") : gt("Keep this computer awake")}
       </TooltipPopup>
     </Tooltip>
   );

@@ -1,5 +1,5 @@
 import { formatDuration as formatStepDuration } from "@t3tools/shared/orchestrationTiming";
-import { formatDuration as formatResetDuration } from "@t3tools/shared/usageLimits";
+import { formatDuration as formatResetDuration } from "@t3tools/shared/usageLimitsCopy";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -10,6 +10,8 @@ import {
   WifiOffIcon,
   XIcon,
 } from "lucide-react";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { m, type MessageResolver } from "~/i18n/messages";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { EnvironmentId, PlanId, ThreadId } from "@t3tools/contracts";
@@ -59,12 +61,16 @@ interface Presentation {
 
 const ICON_CLASS = "size-4 shrink-0";
 
-function resetsInLabel(resetAt: string | null, nowMs: number): string {
-  if (resetAt === null) return "Check the usage card for the reset time";
+function resetsInLabel(
+  resetAt: string | null,
+  nowMs: number,
+  resolve: MessageResolver = m,
+): string {
+  if (resetAt === null) return resolve(msg("Check the usage card for the reset time"));
   const remaining = Date.parse(resetAt) - nowMs;
   return remaining > 0
-    ? `Resets in ${formatResetDuration(remaining)}`
-    : "Should be available again";
+    ? resolve(msg("Resets in {duration}", { duration: formatResetDuration(remaining) }))
+    : resolve(msg("Should be available again"));
 }
 
 function dismissedPlanStorageKey(threadId: ThreadId): string {
@@ -83,6 +89,7 @@ function presentStatus(
   status: TodoPanelStatus,
   progress: { readonly done: number; readonly total: number },
   nowMs: number,
+  resolve: MessageResolver = m,
 ): Presentation | null {
   switch (status.kind) {
     case "running":
@@ -133,7 +140,7 @@ function presentStatus(
         color: "var(--color-error)",
         icon: <GaugeIcon className={ICON_CLASS} aria-hidden />,
         head: "Usage limit reached",
-        sub: resetsInLabel(status.resetAt, nowMs),
+        sub: resetsInLabel(status.resetAt, nowMs, resolve),
       };
     case "failed":
       return {
@@ -283,8 +290,11 @@ export function ThreadTodoPanel({
 }) {
   // Read here, not in ChatView: it moves with every streamed chunk and would re-render the chat.
   const threadUpdatedAt = useThreadUpdatedAt(scopeThreadRef(environmentId, threadId));
-  const lastActivityAtMs = threadUpdatedAt === null ? null : DateTime.toEpochMillis(threadUpdatedAt);
+  const lastActivityAtMs =
+    threadUpdatedAt === null ? null : DateTime.toEpochMillis(threadUpdatedAt);
   const canvas = useChatCanvas();
+  const gt = useGT();
+  const resolve = useMessages();
   const [dismissedPlanId, setDismissedPlanId] = useState(() => readDismissedPlanId(threadId));
   const allStepsDone = steps.length > 0 && steps.every((step) => step.status === "completed");
   const runActive = statusInput.runStatus === "running";
@@ -326,7 +336,7 @@ export function ThreadTodoPanel({
   const presentation =
     noList && ENDED_STATUS_KINDS.has(status.kind)
       ? null
-      : presentStatus(status, { done, total: steps.length }, nowMs);
+      : presentStatus(status, { done, total: steps.length }, nowMs, resolve);
   const showEmptyNote = noList && presentation === null;
   const top = gap + canvas.detailsCardTopInset;
   const clearCompletedPlan = () => {
@@ -341,7 +351,7 @@ export function ThreadTodoPanel({
 
   return (
     <aside
-      aria-label="Agent to-do list"
+      aria-label={gt("Agent to-do list")}
       className="absolute z-20"
       style={{
         left: PANEL_LEFT,
@@ -357,7 +367,7 @@ export function ThreadTodoPanel({
         <section className="shrink-0 px-2 pt-2 pb-2">
           <div className="flex min-h-8 items-center justify-between gap-2 px-1.5">
             <h3 className="min-w-0 truncate text-2xs font-medium text-muted-foreground select-none">
-              Progress
+              <T>Progress</T>
             </h3>
             {steps.length > 0 ? (
               <div className="flex shrink-0 items-center gap-1.5">
@@ -403,10 +413,10 @@ export function ThreadTodoPanel({
                   variant="ghost"
                   size="xs"
                   className="ml-auto shrink-0"
-                  aria-label="Clear completed task list"
+                  aria-label={gt("Clear completed task list")}
                   onClick={clearCompletedPlan}
                 >
-                  Clear
+                  <T>Clear</T>
                 </Button>
               ) : null}
             </div>
@@ -414,10 +424,10 @@ export function ThreadTodoPanel({
           {showEmptyNote ? (
             <div className="px-2.5 pt-0.5 pb-1.5">
               <p className="m-0 text-[13px] leading-4 font-medium text-foreground/80">
-                Nothing's up
+                <T>Nothing's up</T>
               </p>
               <p className="m-0 mt-0.5 text-xs leading-4 text-muted-foreground">
-                When an agent plans a to-do list, it shows up here.
+                <T>When an agent plans a to-do list, it shows up here.</T>
               </p>
             </div>
           ) : null}

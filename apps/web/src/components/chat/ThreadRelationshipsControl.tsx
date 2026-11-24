@@ -683,7 +683,7 @@ export function ThreadRelationshipsPanel(props: {
     // "Active" means still holding a live provider process, so a waiting agent counts too.
     {
       id: "active",
-      label: "Active agents",
+      label: gt("Active agents"),
       rows: [...active, ...remoteActive],
       expanded: true,
       // Subagents with no child thread have no row to list, so the count adds them or it would

@@ -693,6 +693,9 @@ export function IssuesPage() {
                 rightPanelOpen={rightPanelState.isOpen}
                 rightPanelShortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggle")}
                 rightPanelUnavailableLabel={gt("Select an issue first")}
+                explorerAvailable={false}
+                explorerOpen={false}
+                onToggleExplorer={() => undefined}
                 onToggleTerminal={() => undefined}
                 onToggleRightPanel={toggleRightPanel}
               />

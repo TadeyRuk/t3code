@@ -134,7 +134,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
               className="shrink-0 [-webkit-app-region:no-drag]"
               pressed={explorerOpen}
               onPressedChange={onToggleExplorer}
-              aria-label="Toggle project Explorer"
+              aria-label={gt("Toggle project Explorer")}
               data-project-explorer-toggle
               variant="ghost"
               size="sm"
@@ -144,7 +144,9 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             </Toggle>
           </TooltipTrigger>
           <TooltipPopup side="bottom">
-            {explorerAvailable ? "Toggle project Explorer" : "Explorer is available in projects"}
+            {explorerAvailable
+              ? gt("Toggle project Explorer")
+              : gt("Explorer is available in projects")}
           </TooltipPopup>
         </Tooltip>
       ) : null}

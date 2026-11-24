@@ -154,7 +154,7 @@ export function buildThreadActionMenuItems(
       : []),
     {
       id: "clear-session",
-      label: "Clear session (keep in history)",
+      label: resolve(msg("Clear session (keep in history)")),
       icon: "message-square-plus",
       separatorBefore: true,
     },

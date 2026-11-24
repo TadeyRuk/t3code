@@ -4254,7 +4254,10 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadUsageCard
-                  threadRef={{ environmentId: activeThread.environmentId, threadId: activeThread.id }}
+                  threadRef={{
+                    environmentId: activeThread.environmentId,
+                    threadId: activeThread.id,
+                  }}
                   contextWindow={activeContextWindow}
                   providerInstanceId={activeProviderInstanceId}
                   providers={providerStatuses}
@@ -4262,7 +4265,7 @@ export default function ChatView(props: ChatViewProps) {
                   compactAction={
                     manualCompactionProviderAvailable
                       ? {
-                          label: "Compact context",
+                          label: gt("Compact context"),
                           onActivate: onComposerCompactContextStable,
                           disabled: compactDisabled,
                         }

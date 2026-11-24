@@ -1,5 +1,6 @@
 import type { EnvironmentId, ListeningPort } from "@t3tools/contracts";
 import { ChevronRightIcon, XIcon } from "lucide-react";
+import { T, Var, useGT } from "gt-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -48,6 +49,7 @@ function portUrl(entry: ListeningPort): string | null {
  */
 export function ListeningPortsSection(props: { readonly environmentId: EnvironmentId }) {
   const { environmentId } = props;
+  const gt = useGT();
   const [open, setOpen] = useState(true);
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const query = useEnvironmentQuery(open ? listeningPorts({ environmentId, input: {} }) : null);
@@ -66,7 +68,7 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
       .catch((error: unknown) => {
         toastManager.add({
           type: "error",
-          title: "Unable to open port",
+          title: gt("Unable to open port"),
           description: error instanceof Error ? error.message : String(error),
         });
       });
@@ -78,8 +80,11 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
     if (result._tag !== "Success" || !result.value.stopped) {
       toastManager.add({
         type: "error",
-        title: `Could not stop :${entry.port}`,
-        description: `${entry.processName || "Process"} (pid ${entry.pid}) did not exit, is protected, or already stopped.`,
+        title: gt("Could not stop :{port}", { port: entry.port }),
+        description: gt("{name} (pid {pid}) did not exit, is protected, or already stopped.", {
+          name: entry.processName || gt("Process"),
+          pid: entry.pid,
+        }),
       });
     }
     query.refresh();
@@ -88,7 +93,7 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
   return (
     <section
       className="flex max-h-[45%] min-h-0 shrink-0 flex-col border-t border-border/60"
-      aria-label="Active ports"
+      aria-label={gt("Active ports")}
       data-listening-ports
     >
       <div className="flex h-8 min-h-8 shrink-0 items-center gap-1 px-2 text-xs font-medium text-muted-foreground">
@@ -99,7 +104,9 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
           onClick={() => setOpen((value) => !value)}
         >
           <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} />
-          <span>Ports</span>
+          <span>
+            <T>Ports</T>
+          </span>
           {ports.length > 0 ? <span className="tabular-nums">({ports.length})</span> : null}
         </button>
         {open ? (
@@ -110,14 +117,16 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  aria-label="Refresh active ports"
+                  aria-label={gt("Refresh active ports")}
                   onClick={query.refresh}
                 />
               }
             >
               <RefreshIcon refreshing={query.isPending} />
             </TooltipTrigger>
-            <TooltipPopup>Refresh ports</TooltipPopup>
+            <TooltipPopup>
+              <T>Refresh ports</T>
+            </TooltipPopup>
           </Tooltip>
         ) : null}
       </div>
@@ -125,16 +134,20 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
         <ul className="min-h-0 overflow-y-auto pb-1">
           {query.error !== null && ports.length === 0 ? (
             <li className="px-3 py-1.5 text-xs text-muted-foreground/70">
-              Could not read ports: {query.error}
+              <T>
+                Could not read ports: <Var>{query.error}</Var>
+              </T>
             </li>
           ) : null}
           {query.error === null && query.isSuccess && ports.length === 0 ? (
-            <li className="px-3 py-1.5 text-xs text-muted-foreground/70">No active ports</li>
+            <li className="px-3 py-1.5 text-xs text-muted-foreground/70">
+              <T>No active ports</T>
+            </li>
           ) : null}
           {ports.map((entry) => {
             const key = portKey(entry);
             const url = portUrl(entry);
-            const name = entry.processName || `pid ${entry.pid}`;
+            const name = entry.processName || gt("pid {pid}", { pid: entry.pid });
             return (
               <li key={key} className="flex items-center gap-1 px-2">
                 <Tooltip>
@@ -160,13 +173,13 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
                   </TooltipTrigger>
                   <TooltipPopup>
                     {url !== null
-                      ? `Open ${url}`
-                      : "Only listening on the host's localhost, so this device can't reach it"}
+                      ? gt("Open {url}", { url })
+                      : gt("Only listening on the host's localhost, so this device can't reach it")}
                   </TooltipPopup>
                 </Tooltip>
                 {entry.protected ? (
                   <span className="shrink-0 px-1 text-3xs text-muted-foreground/70">
-                    this server
+                    <T>this server</T>
                   </span>
                 ) : confirmKey === key ? (
                   <Button
@@ -175,7 +188,7 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
                     size="xs"
                     onClick={() => void stopPort(entry)}
                   >
-                    Kill?
+                    <T>Kill?</T>
                   </Button>
                 ) : (
                   <Tooltip>
@@ -185,14 +198,18 @@ export function ListeningPortsSection(props: { readonly environmentId: Environme
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          aria-label={`Kill process on port ${entry.port}`}
+                          aria-label={gt("Kill process on port {port}", { port: entry.port })}
                           onClick={() => setConfirmKey(key)}
                         />
                       }
                     >
                       <XIcon className="size-3.5" />
                     </TooltipTrigger>
-                    <TooltipPopup>Kill {name}</TooltipPopup>
+                    <TooltipPopup>
+                      <T>
+                        Kill <Var>{name}</Var>
+                      </T>
+                    </TooltipPopup>
                   </Tooltip>
                 )}
               </li>

@@ -840,8 +840,8 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add(
         stackedThreadToast({
           type: "warning",
-          title: "Add a task for the child agent",
-          description: "Use /summon followed by what you want the child agent to do.",
+          title: m(msg("Add a task for the child agent")),
+          description: m(msg("Use /summon followed by what you want the child agent to do.")),
         }),
       );
       return;
